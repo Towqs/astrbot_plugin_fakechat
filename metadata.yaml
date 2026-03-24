@@ -1,7 +1,7 @@
 name: astrbot_plugin_sadstory
 display_name: 伤感故事
 desc: 在群聊中以合并转发消息的形式展示伤感故事，支持 LLM 生成、故事模板参考、自定义角色、群白名单等
-version: v0.2.8
+version: v0.2.9
 author: Towqs
 repo: https://github.com/Towqs/astrbot_plugin_sadstory
 support_platforms:

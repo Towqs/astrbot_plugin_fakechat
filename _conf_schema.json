@@ -77,6 +77,12 @@
     "hint": "开启后 LLM 生成故事时会随机选取一个模板作为风格参考。关闭则纯靠 LLM 自由发挥。",
     "default": true
   },
+  "use_face_emoji": {
+    "description": "启用QQ表情",
+    "type": "bool",
+    "hint": "开启后故事消息中会穿插QQ自带表情（如流泪、大哭、叹气等），让聊天更真实。",
+    "default": true
+  },
   "story_templates": {
     "description": "故事模板列表",
     "type": "list",
