@@ -79,9 +79,13 @@ astrbot_plugin_sadstory/
 
 ## 📝 更新日志
 
+### v0.2.2
+- 彻底修复群消息识别问题：改用 `AiocqhttpMessageEvent` 类型替代通用 `AstrMessageEvent`
+- 使用 `event.get_group_id()` 原生方法获取群号，不再手动解析
+- 参考 astrbot_plugin_qqadmin 插件的正确实现方式
+
 ### v0.2.1
-- 修复群聊中发送 `/sadstory` 提示"只能在群聊中使用"的严重 bug
-- 群号提取方式从 `getattr(event, "group_id")` 改为解析 `event.unified_msg_origin`，兼容 AstrBot aiocqhttp 适配器
+- 尝试修复群号提取（未生效，因为 AstrMessageEvent 不支持 group_id）
 
 ### v0.2.0
 - 新增故事模板系统，支持从 `templates/` 目录加载参考素材
