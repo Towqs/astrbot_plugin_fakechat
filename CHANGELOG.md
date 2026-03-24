@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.2.8
+- 修复 _parse_list/_parse_int 参数类型问题，兼容 WebUI 返回的 int 类型
+- 修复 group_users 重复追加导致用户池膨胀的 bug
+- sadstory_listtpl 同时显示后台配置模板和文件模板
+- 故事生成失败时提示用户池不足的可能原因
+
 ## v0.2.7
 - 新增 WebUI 后台模板管理：在插件配置中直接增删改故事模板
 - 模板来源合并：WebUI 配置中的模板 + templates/ 目录下的文件模板同时生效
