@@ -1,0 +1,62 @@
+{
+  "source_group_id": {
+    "description": "素材群群号",
+    "type": "string",
+    "hint": "把机器人拉到一个群里，填写该群号，插件会从中读取成员作为故事角色。填 0 或留空则不从群读取。",
+    "default": ""
+  },
+  "include_users": {
+    "description": "素材群用户白名单",
+    "type": "string",
+    "hint": "只使用这些QQ号作为角色，多个用英文逗号分隔（如：123456,789012）。留空则使用素材群全部成员。",
+    "default": ""
+  },
+  "exclude_users": {
+    "description": "素材群用户黑名单",
+    "type": "string",
+    "hint": "排除这些QQ号（比如机器人自己），多个用英文逗号分隔。",
+    "default": ""
+  },
+  "use_card_as_name": {
+    "description": "优先使用群名片",
+    "type": "bool",
+    "hint": "开启后优先使用群名片作为角色昵称，关闭则使用QQ昵称。",
+    "default": true
+  },
+  "custom_users": {
+    "description": "自定义虚拟用户",
+    "type": "string",
+    "hint": "手动配置角色，格式：昵称1:QQ号1,昵称2:QQ号2（如：路人甲:10001,吃瓜群众:10002）。可与素材群共存。",
+    "default": ""
+  },
+  "allowed_groups": {
+    "description": "群白名单",
+    "type": "string",
+    "hint": "允许触发伤感故事的群号，多个用英文逗号分隔。留空则所有群都可触发。",
+    "default": ""
+  },
+  "cooldown_seconds": {
+    "description": "冷却时间（秒）",
+    "type": "int",
+    "hint": "同一个群两次触发之间的最短间隔，防止刷屏。设为 0 则无冷却。",
+    "default": 60
+  },
+  "story_min_messages": {
+    "description": "故事最少消息条数",
+    "type": "int",
+    "hint": "LLM 生成故事的最少消息条数。",
+    "default": 30
+  },
+  "story_max_messages": {
+    "description": "故事最多消息条数",
+    "type": "int",
+    "hint": "LLM 生成故事的最多消息条数。",
+    "default": 80
+  },
+  "bystander_count": {
+    "description": "围观网友数量",
+    "type": "int",
+    "hint": "故事中穿插评论的围观网友数量。",
+    "default": 3
+  }
+}
