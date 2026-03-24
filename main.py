@@ -42,7 +42,7 @@ STORY_PROMPT = """你是一个伤感故事创作者。请根据以下要求生�
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伤感故事插件 - 以合并转发形式在群聊中展示伤感故事", "0.2.6")
+@register("astrbot_plugin_sadstory", "Towqs", "伤感故事插件 - 以合并转发形式在群聊中展示伤感故事", "0.2.7")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -72,6 +72,15 @@ class SadStoryPlugin(Star):
         self.use_virtual_users = cfg.get("use_virtual_users", False)
         self.use_story_template = cfg.get("use_story_template", True)
 
+        # 从 WebUI 配置读取模板列表
+        raw_templates = cfg.get("story_templates", [])
+        self.config_templates = []
+        if isinstance(raw_templates, list):
+            for t in raw_templates:
+                t = str(t).strip()
+                if t:
+                    self.config_templates.append(t)
+
         # 解析自定义用户：格式 "昵称1:QQ号1,昵称2:QQ号2"
         custom_str = cfg.get("custom_users", "")
         custom_users = []
@@ -93,19 +102,21 @@ class SadStoryPlugin(Star):
         self.user_pool = custom_users + self.group_users
 
     def _load_templates(self) -> list:
-        templates = []
-        if not os.path.isdir(TEMPLATES_DIR):
-            return templates
-        for fname in sorted(os.listdir(TEMPLATES_DIR)):
-            if fname.endswith(".txt"):
-                fpath = os.path.join(TEMPLATES_DIR, fname)
-                try:
-                    with open(fpath, "r", encoding="utf-8") as f:
-                        content = f.read().strip()
-                    if content:
-                        templates.append(content)
-                except Exception as e:
-                    logger.warning(f"[SadStory] 加载模板 {fname} 失败: {e}")
+        """加载所有模板：WebUI 配置中的 + templates/ 目录下的文件"""
+        templates = list(self.config_templates)  # 先加配置里的
+        # 再加文件里的
+        if os.path.isdir(TEMPLATES_DIR):
+            for fname in sorted(os.listdir(TEMPLATES_DIR)):
+                if fname.endswith(".txt"):
+                    fpath = os.path.join(TEMPLATES_DIR, fname)
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            content = f.read().strip()
+                        if content:
+                            templates.append(content)
+                    except Exception as e:
+                        logger.warning(f"[SadStory] 加载模板 {fname} 失败: {e}")
+        logger.info(f"[SadStory] 模板总数: {len(templates)}（配置: {len(self.config_templates)}, 文件: {len(templates) - len(self.config_templates)}）")
         return templates
 
     @staticmethod

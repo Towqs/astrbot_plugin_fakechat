@@ -74,7 +74,13 @@
   "use_story_template": {
     "description": "启用故事模板参考",
     "type": "bool",
-    "hint": "开启后 LLM 生成故事时会随机选取一个模板作为风格参考。关闭则纯靠 LLM 自由发挥。模板可通过群内命令 /sadstory_addtpl 导入。",
+    "hint": "开启后 LLM 生成故事时会随机选取一个模板作为风格参考。关闭则纯靠 LLM 自由发挥。",
     "default": true
+  },
+  "story_templates": {
+    "description": "故事模板列表",
+    "type": "list",
+    "hint": "在此添加故事模板，每个条目是一个完整的故事参考文本。LLM 会随机选取一个模仿其风格。也可通过群内命令 /sadstory_addtpl 导入。",
+    "default": []
   }
 }
