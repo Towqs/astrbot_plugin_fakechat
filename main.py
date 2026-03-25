@@ -393,15 +393,25 @@ class SadStoryPlugin(Star):
 """
 
         story_prompt = await self._get_active_prompt_style()
-        prompt = story_prompt.format(
-            protagonist=protagonist["nickname"],
-            bystanders=bystander_names,
-            min_msg=self.story_min_messages,
-            max_msg=self.story_max_messages,
-            theme_line=theme_line,
-            reference_section=reference_section,
-            emoji_instruction=EMOJI_INSTRUCTION if self.use_face_emoji else "",
-        )
+        # 用 SafeDict 容错：用户自定义风格中的未知变量保留原样而不报错
+        format_vars = {
+            "protagonist": protagonist["nickname"],
+            "bystanders": bystander_names,
+            "min_msg": self.story_min_messages,
+            "max_msg": self.story_max_messages,
+            "theme_line": theme_line,
+            "reference_section": reference_section,
+            "emoji_instruction": EMOJI_INSTRUCTION if self.use_face_emoji else "",
+        }
+        try:
+            prompt = story_prompt.format_map(
+                type("SafeDict", (dict,), {"__missing__": lambda self, key: f"{{{key}}}"})
+                (format_vars)
+            )
+        except Exception as e:
+            logger.warning(f"[SadStory] 风格模板格式化失败，回退到内置风格: {e}")
+            fallback = STORY_PROMPT_CASUAL if self.use_casual_style else STORY_PROMPT_LITERARY
+            prompt = fallback.format(**format_vars)
 
         try:
             if self.chat_provider_id:
