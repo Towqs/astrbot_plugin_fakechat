@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.5.0
+- 新增 LLM 工具调用：`llm_add_writing_style` 和 `llm_add_story_template`，支持模型审查并写入风格/模板
+- 新增 `/sadstory_aistyle 风格描述` 命令：AI 根据描述自动生成符合规范的写作风格 prompt 并写入数据库
+- 新增 `/sadstory_aitpl 故事描述` 命令：AI 根据描述创作完整故事模板范文并写入数据库
+- 工具调用通过命令触发，带系统提示词约束，不会随意调用
+
 ## v0.4.1
 - WebUI 支持通过 template_list 添加写作风格和故事模板（保存后自动导入数据库）
 - 每次触发 /sadstory 时自动检查并导入 WebUI 新数据
