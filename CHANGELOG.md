@@ -1,10 +1,9 @@
 # 更新日志
 
-## v0.4.2
-- 新增 LLM 工具调用：`llm_add_writing_style` 和 `llm_add_story_template`，支持模型审查并写入风格/模板
-- 新增 `/sadstory_aistyle 风格描述` 命令：AI 根据描述自动生成符合规范的写作风格 prompt 并写入数据库
-- 新增 `/sadstory_aitpl 故事描述` 命令：AI 根据描述创作完整故事模板范文并写入数据库
-- 工具调用通过命令触发，带系统提示词约束，不会随意调用
+## v0.5.2
+- 新增 WebUI 导入调试日志，排查 template_list 数据格式问题
+- 修复 metadata.yaml 版本号与 main.py 不一致的问题
+- 全局重命名：「伤感故事」→「伪装聊天」
 
 ## v0.4.3
 - 修复共享状态并发风险：`_generate_story` 中对用户池使用拷贝，避免 shuffle 污染原始列表
