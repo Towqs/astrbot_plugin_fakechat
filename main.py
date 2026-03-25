@@ -131,7 +131,7 @@ EMOJI_INSTRUCTION = """- 可以在台词中适当插入QQ表情来增加真实�
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.5.4")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.5.5")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -146,6 +146,7 @@ class SadStoryPlugin(Star):
         await self.db.init()
         self._reload_config()
         await self._import_webui_data()
+        await self._import_file_templates()
         logger.info(f"[SadStory] 插件初始化完成，主讲人: {len(self.custom_protagonists)}个, 网友: {len(self.custom_bystanders)}个")
 
     # ==================== 配置管理 ====================
@@ -233,23 +234,28 @@ class SadStoryPlugin(Star):
         if imported:
             logger.info(f"[SadStory] 从 WebUI 导入了 {imported} 条数据到数据库")
 
-    def _load_templates(self) -> list:
-        """加载所有已启用的模板：数据库中的 + templates/ 目录下的文件（同步包装）"""
-        # 注意：数据库模板在 _generate_story 中异步加载
-        # 这里只加载文件模板
-        templates = []
-        if os.path.isdir(TEMPLATES_DIR):
-            for fname in sorted(os.listdir(TEMPLATES_DIR)):
-                if fname.endswith(".txt"):
-                    fpath = os.path.join(TEMPLATES_DIR, fname)
-                    try:
-                        with open(fpath, "r", encoding="utf-8") as f:
-                            content = f.read().strip()
-                        if content:
-                            templates.append(content)
-                    except Exception as e:
-                        logger.warning(f"[SadStory] 加载模板 {fname} 失败: {e}")
-        return templates
+    async def _import_file_templates(self):
+        """将 templates/ 目录下的 .txt 文件模板导入数据库（仅首次，按文件名去重）"""
+        if not os.path.isdir(TEMPLATES_DIR):
+            return
+        imported = 0
+        for fname in sorted(os.listdir(TEMPLATES_DIR)):
+            if not fname.endswith(".txt"):
+                continue
+            name = fname.replace(".txt", "")
+            if await self.db.has_template_by_name(name):
+                continue
+            fpath = os.path.join(TEMPLATES_DIR, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                if content:
+                    await self.db.add_template(name, content, enabled=True)
+                    imported += 1
+            except Exception as e:
+                logger.warning(f"[SadStory] 导入文件模板 {fname} 失败: {e}")
+        if imported:
+            logger.info(f"[SadStory] 从 templates/ 目录导入了 {imported} 个文件模板到数据库")
 
     @staticmethod
     def _parse_int(s, default: int = 0) -> int:
@@ -378,7 +384,6 @@ class SadStoryPlugin(Star):
         templates = []
         if self.use_story_template:
             templates = await self.db.get_enabled_templates()
-            templates += self._load_templates()  # 文件模板
         reference_section = ""
         if templates:
             ref = random.choice(templates)
@@ -618,35 +623,19 @@ class SadStoryPlugin(Star):
         """查看所有故事模板。用法：/sadstory_listtpl，仅管理员可用"""
         self._reload_config()
         db_tpls = await self.db.get_templates()
-        lines = []
-        idx = 1
 
-        if db_tpls:
-            lines.append(f"📋 数据库模板（{len(db_tpls)}个）：")
-            for tpl_id, name, enabled, content in db_tpls:
-                status = "✅" if enabled else "❌"
-                preview = content[:40].replace("\n", " ") + ("..." if len(content) > 40 else "")
-                lines.append(f"  {idx}. {status} [{tpl_id}] {name}：{preview}")
-                idx += 1
-
-        file_templates = []
-        if os.path.isdir(TEMPLATES_DIR):
-            file_templates = [f for f in sorted(os.listdir(TEMPLATES_DIR)) if f.endswith(".txt")]
-        if file_templates:
-            lines.append(f"📁 文件模板（{len(file_templates)}个，始终启用）：")
-            for fname in file_templates:
-                fpath = os.path.join(TEMPLATES_DIR, fname)
-                size = os.path.getsize(fpath)
-                name = fname.replace(".txt", "")
-                lines.append(f"  {idx}. ✅ {name}（{size}字节）")
-                idx += 1
-
-        if not lines:
+        if not db_tpls:
             yield event.plain_result("暂无故事模板\n用 /sadstory_addtpl 添加")
             return
 
-        lines.insert(0, f"📝 故事模板列表（共{idx - 1}个）：")
+        lines = [f"📝 故事模板列表（共{len(db_tpls)}个）："]
+        for tpl_id, name, enabled, content in db_tpls:
+            status = "✅" if enabled else "❌"
+            preview = content[:40].replace("\n", " ") + ("..." if len(content) > 40 else "")
+            lines.append(f"  {status} [{tpl_id}] {name}（{len(content)}字）：{preview}")
+
         lines.append(f"\n模板参考当前{'已启用 ✅' if self.use_story_template else '已关闭 ❌'}")
+        lines.append("用 /sadstory_usetpl ID 切换启用状态")
         yield event.plain_result("\n".join(lines))
 
     @filter.command("sadstory_usetpl", permission=True)
@@ -671,30 +660,21 @@ class SadStoryPlugin(Star):
 
     @filter.command("sadstory_deltpl", permission=True)
     async def delete_template(self, event: AiocqhttpMessageEvent, tpl_name: str = ""):
-        """删除故事模板。用法：/sadstory_deltpl ID 或文件名，仅管理员可用"""
+        """删除故事模板。用法：/sadstory_deltpl ID，仅管理员可用"""
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
-            yield event.plain_result("用法：/sadstory_deltpl ID（数据库模板）或 /sadstory_deltpl 文件名（文件模板）")
+            yield event.plain_result("用法：/sadstory_deltpl ID\n（ID 可通过 /sadstory_listtpl 查看方括号内的数字）")
             return
         try:
             tpl_id = int(arg)
-            name = await self.db.delete_template(tpl_id)
-            if name:
-                yield event.plain_result(f"模板「{name}」已从数据库删除")
-                return
-            yield event.plain_result(f"ID {tpl_id} 不存在")
-            return
         except ValueError:
-            pass
-        fpath = os.path.join(TEMPLATES_DIR, f"{arg}.txt")
-        if not os.path.isfile(fpath):
-            yield event.plain_result(f"模板「{arg}」不存在，用 /sadstory_listtpl 查看列表")
+            yield event.plain_result("请输入模板 ID（数字）")
             return
-        try:
-            os.remove(fpath)
-            yield event.plain_result(f"文件模板「{arg}」已删除")
-        except Exception as e:
-            yield event.plain_result(f"删除失败: {e}")
+        name = await self.db.delete_template(tpl_id)
+        if name:
+            yield event.plain_result(f"模板「{name}」已删除")
+        else:
+            yield event.plain_result(f"ID {tpl_id} 不存在，用 /sadstory_listtpl 查看列表")
 
     # ==================== 配置预览与风格指令 ====================
 
@@ -734,16 +714,10 @@ class SadStoryPlugin(Star):
         lines.append("")
         lines.append("─── 故事模板 ───")
         lines.append(f"模板参考：{'✅ 开启' if self.use_story_template else '❌ 关闭'}")
-        tpl_count = 0
-        for tpl_id, name, enabled, content in db_tpls:
-            tpl_count += 1
-            lines.append(f"  [{tpl_id}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
-        if os.path.isdir(TEMPLATES_DIR):
-            for fname in sorted(os.listdir(TEMPLATES_DIR)):
-                if fname.endswith(".txt"):
-                    tpl_count += 1
-                    lines.append(f"  ✅ {fname.replace('.txt', '')}（文件）")
-        if tpl_count == 0:
+        if db_tpls:
+            for tpl_id, name, enabled, content in db_tpls:
+                lines.append(f"  [{tpl_id}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
+        else:
             lines.append("  暂无模板")
 
         yield event.plain_result("\n".join(lines))

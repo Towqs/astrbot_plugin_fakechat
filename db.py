@@ -90,6 +90,11 @@ class SadStoryDB:
         async with self._conn.execute("SELECT content FROM story_templates WHERE enabled=1") as cur:
             return [r["content"] async for r in cur]
 
+    async def has_template_by_name(self, name: str) -> bool:
+        """检查是否已存在同名模板"""
+        async with self._conn.execute("SELECT 1 FROM story_templates WHERE name=?", (name,)) as cur:
+            return await cur.fetchone() is not None
+
     async def add_template(self, name: str, content: str, enabled: bool = True) -> int:
         cur = await self._conn.execute(
             "INSERT INTO story_templates (name, enabled, content) VALUES (?, ?, ?)",
