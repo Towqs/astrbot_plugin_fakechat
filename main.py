@@ -164,6 +164,24 @@ class SadStoryPlugin(Star):
         self.use_face_emoji = self._parse_bool(cfg.get("use_face_emoji", True))
         self.use_casual_style = self._parse_bool(cfg.get("use_casual_style", True))
 
+        # 解析 prompt 风格模板列表（每条格式：风格名|启用|prompt内容）
+        raw_styles = cfg.get("prompt_styles", [])
+        self.prompt_styles = []  # [(name, enabled, content), ...]
+        if isinstance(raw_styles, list):
+            for s in raw_styles:
+                s = str(s).strip()
+                if not s:
+                    continue
+                parts = s.split("|", 2)
+                if len(parts) == 3:
+                    style_name = parts[0].strip()
+                    enabled = parts[1].strip() in ("是", "true", "True", "1", "yes")
+                    content = parts[2].strip()
+                    if style_name and content:
+                        self.prompt_styles.append((style_name, enabled, content))
+                else:
+                    self.prompt_styles.append(("未命名风格", True, s))
+
         # 解析主讲人QQ号列表
         raw_protagonists = cfg.get("protagonist_qq_list", [])
         self.custom_protagonists = []
@@ -292,6 +310,16 @@ class SadStoryPlugin(Star):
     def _set_cooldown(self, group_id: str):
         self.cooldown_map[group_id] = time.time()
 
+    # ==================== Prompt 风格管理 ====================
+
+    def _get_active_prompt_style(self) -> str:
+        """从已启用的 prompt 风格中随机选一个，没有则回退到内置默认"""
+        enabled = [content for _, en, content in self.prompt_styles if en]
+        if enabled:
+            return random.choice(enabled)
+        # 回退：根据 use_casual_style 选内置模板
+        return STORY_PROMPT_CASUAL if self.use_casual_style else STORY_PROMPT_LITERARY
+
     # ==================== 故事生成 ====================
 
     def _get_at_user_id(self, event: AiocqhttpMessageEvent) -> str | None:
@@ -350,22 +378,14 @@ class SadStoryPlugin(Star):
             if len(ref) > 2000:
                 ref = ref[:2000] + "\n...(省略)"
             ref = ref.replace("{", "{{").replace("}", "}}")
-            if self.use_casual_style:
-                reference_section = f"""
-以下是一个参考故事的风格示例（请模仿这种碎片化、口语化的叙事风格，但不要抄袭内容，要创作全新的故事）：
----
-{ref}
----
-"""
-            else:
-                reference_section = f"""
-以下是一个参考故事的风格示例（请参考其叙事结构和情感表达，但不要抄袭内容，要创作全新的故事）：
+            reference_section = f"""
+以下是一个参考故事的风格示例（请参考其叙事风格和情感表达，但不要抄袭内容，要创作全新的故事）：
 ---
 {ref}
 ---
 """
 
-        story_prompt = STORY_PROMPT_CASUAL if self.use_casual_style else STORY_PROMPT_LITERARY
+        story_prompt = self._get_active_prompt_style()
         prompt = story_prompt.format(
             protagonist=protagonist["nickname"],
             bystanders=bystander_names,
@@ -667,6 +687,115 @@ class SadStoryPlugin(Star):
             yield event.plain_result(f"模板「{name}」已删除")
         except Exception as e:
             yield event.plain_result(f"删除失败: {e}")
+
+    # ==================== Prompt 风格指令 ====================
+
+    @filter.command("sadstory_style", permission=True)
+    async def show_styles(self, event: AiocqhttpMessageEvent):
+        """查看当前 prompt 风格配置。用法：/sadstory_style，仅管理员可用"""
+        self._reload_config()
+        lines = []
+
+        # 当前生效参数
+        lines.append("⚙️ 当前生成参数：")
+        lines.append(f"  消息条数：{self.story_min_messages} ~ {self.story_max_messages}")
+        lines.append(f"  围观网友数：{self.bystander_count}")
+        lines.append(f"  QQ表情：{'开启' if self.use_face_emoji else '关闭'}")
+        lines.append(f"  故事模板参考：{'开启' if self.use_story_template else '关闭'}")
+        lines.append(f"  冷却时间：{self.cooldown_seconds}秒")
+        lines.append(f"  LLM模型：{self.chat_provider_id or '默认'}")
+        lines.append("")
+
+        # Prompt 风格列表
+        if self.prompt_styles:
+            enabled_count = sum(1 for _, en, _ in self.prompt_styles if en)
+            lines.append(f"🎨 Prompt 风格（共{len(self.prompt_styles)}个，启用{enabled_count}个）：")
+            for idx, (name, enabled, content) in enumerate(self.prompt_styles, 1):
+                status = "✅" if enabled else "❌"
+                # 显示前60字作为预览
+                preview = content[:60].replace("\n", "↵ ") + ("..." if len(content) > 60 else "")
+                lines.append(f"  {idx}. {status} {name}：{preview}")
+            lines.append("")
+            lines.append("生成时从已启用的风格中随机选取")
+        else:
+            fallback = "口语化" if self.use_casual_style else "文学"
+            lines.append(f"🎨 Prompt 风格：未配置自定义风格，使用内置{fallback}风格")
+            lines.append("提示：可在 WebUI 后台「prompt_styles」中添加，或用 /sadstory_addstyle 添加")
+
+        yield event.plain_result("\n".join(lines))
+
+    @filter.command("sadstory_addstyle", permission=True)
+    async def add_style(self, event: AiocqhttpMessageEvent):
+        """添加 prompt 风格。用法：/sadstory_addstyle 风格名（换行后跟 prompt 内容），仅管理员可用"""
+        raw = event.message_str
+        parts = raw.split("\n", 1)
+        first_line = parts[0].replace("/sadstory_addstyle", "").strip()
+        content = parts[1].strip() if len(parts) > 1 else ""
+
+        if not first_line:
+            yield event.plain_result(
+                "用法：/sadstory_addstyle 风格名\n（换行后跟 prompt 内容）\n\n"
+                "prompt 中可用变量：\n"
+                "  {protagonist} — 主角名\n"
+                "  {bystanders} — 网友名列表\n"
+                "  {min_msg} / {max_msg} — 消息条数范围\n"
+                "  {theme_line} — 主题行\n"
+                "  {reference_section} — 参考模板\n"
+                "  {emoji_instruction} — 表情说明\n\n"
+                "提示：末尾记得加 JSON 输出格式要求"
+            )
+            return
+
+        if not content:
+            yield event.plain_result("prompt 内容不能为空，请在风格名后换行输入")
+            return
+
+        # 添加到内存（本次运行生效）
+        self.prompt_styles.append((first_line, True, content))
+        yield event.plain_result(
+            f"风格「{first_line}」已添加并启用（{len(content)}字）\n\n"
+            "⚠️ 此操作仅本次运行生效。如需永久保存，请在 WebUI 后台「prompt_styles」中添加。"
+        )
+
+    @filter.command("sadstory_usestyle", permission=True)
+    async def toggle_style(self, event: AiocqhttpMessageEvent):
+        """启用/禁用 prompt 风格。用法：/sadstory_usestyle 序号，仅管理员可用"""
+        arg = event.message_str.replace("/sadstory_usestyle", "").strip()
+        if not arg:
+            yield event.plain_result(
+                "用法：/sadstory_usestyle 序号\n"
+                "（序号可通过 /sadstory_style 查看）\n\n"
+                "效果：切换该风格的启用/禁用状态"
+            )
+            return
+
+        try:
+            target_idx = int(arg)
+        except ValueError:
+            yield event.plain_result("请输入风格序号（数字）")
+            return
+
+        self._reload_config()
+        if target_idx < 1 or target_idx > len(self.prompt_styles):
+            yield event.plain_result(f"序号超出范围，当前共 {len(self.prompt_styles)} 个风格")
+            return
+
+        name, enabled, content = self.prompt_styles[target_idx - 1]
+        new_enabled = not enabled
+        self.prompt_styles[target_idx - 1] = (name, new_enabled, content)
+        new_status = "已启用 ✅" if new_enabled else "已禁用 ❌"
+
+        # 检查是否还有启用的风格
+        enabled_count = sum(1 for _, en, _ in self.prompt_styles if en)
+        fallback_hint = ""
+        if enabled_count == 0:
+            fallback = "口语化" if self.use_casual_style else "文学"
+            fallback_hint = f"\n\n⚠️ 当前没有启用的风格，将使用内置{fallback}风格"
+
+        yield event.plain_result(
+            f"风格「{name}」{new_status}\n\n"
+            f"提示：此操作仅本次运行生效。如需永久修改，请在 WebUI 后台调整。{fallback_hint}"
+        )
 
     async def terminate(self):
         logger.info("[SadStory] 插件已卸载")
