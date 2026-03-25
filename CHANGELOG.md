@@ -1,5 +1,10 @@
 # 更新日志
 
+## v0.4.1
+- WebUI 支持通过 template_list 添加写作风格和故事模板（保存后自动导入数据库）
+- 每次触发 /sadstory 时自动检查并导入 WebUI 新数据
+- _reload_config 保持同步，WebUI 导入逻辑独立为 async 方法
+
 ## v0.4.0
 - 写作风格和故事模板改用 SQLite 数据库存储，彻底绕开 WebUI template_list 的兼容性问题
 - 新增 /sadstory_delstyle 指令：删除写作风格

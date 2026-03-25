@@ -36,14 +36,70 @@
   "use_casual_style": {
     "description": "默认使用口语化风格",
     "type": "bool",
-    "hint": "当没有添加写作风格时的后备。开启=口语化，关闭=文学风格。写作风格通过群指令 /sadstory_addstyle 管理。",
+    "hint": "当没有写作风格时的后备。开启=口语化，关闭=文学风格。",
     "default": true
+  },
+  "add_writing_styles": {
+    "description": "添加写作风格（保存后自动导入数据库）",
+    "type": "template_list",
+    "templates": {
+      "style": {
+        "name": "写作风格",
+        "hint": "填写后保存，会自动导入数据库。导入后此处会被清空。管理已有风格请用群指令 /sadstory_style。",
+        "items": {
+          "style_name": {
+            "description": "风格名称",
+            "type": "string",
+            "default": "新风格"
+          },
+          "enabled": {
+            "description": "启用",
+            "type": "bool",
+            "default": true
+          },
+          "prompt_content": {
+            "description": "写作指令",
+            "type": "text",
+            "hint": "告诉 AI 怎么写故事。可用变量：{protagonist} {bystanders} {min_msg} {max_msg} {theme_line} {reference_section} {emoji_instruction}",
+            "default": ""
+          }
+        }
+      }
+    }
   },
   "use_story_template": {
     "description": "启用故事模板参考",
     "type": "bool",
-    "hint": "开启后生成故事时会随机选一个模板给 AI 参考风格。模板通过群指令 /sadstory_addtpl 管理。",
+    "hint": "开启后生成故事时会随机选一个模板给 AI 参考风格。",
     "default": true
+  },
+  "add_story_templates": {
+    "description": "添加故事模板（保存后自动导入数据库）",
+    "type": "template_list",
+    "templates": {
+      "tpl": {
+        "name": "故事模板",
+        "hint": "填写后保存，会自动导入数据库。导入后此处会被清空。管理已有模板请用群指令 /sadstory_listtpl。",
+        "items": {
+          "tpl_name": {
+            "description": "模板名称",
+            "type": "string",
+            "default": "新模板"
+          },
+          "enabled": {
+            "description": "启用",
+            "type": "bool",
+            "default": true
+          },
+          "content": {
+            "description": "模板内容",
+            "type": "text",
+            "hint": "一段完整的故事范文，AI 会参考它的风格来创作新故事。",
+            "default": ""
+          }
+        }
+      }
+    }
   },
   "source_group_id": {
     "description": "素材群群号",
