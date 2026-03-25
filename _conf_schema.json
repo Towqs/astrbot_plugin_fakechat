@@ -50,19 +50,17 @@
           "style_name": {
             "description": "风格名称",
             "type": "string",
-            "hint": "给这个风格起个名字，方便辨认。",
             "default": "新风格"
           },
           "enabled": {
             "description": "启用",
             "type": "bool",
-            "hint": "关闭后此风格不会被选中。",
             "default": true
           },
           "prompt_content": {
             "description": "写作指令",
             "type": "text",
-            "hint": "告诉 AI 怎么写故事。支持变量：{protagonist}主角名、{bystanders}网友名、{min_msg}最少条数、{max_msg}最多条数、{theme_line}主题、{reference_section}参考模板、{emoji_instruction}表情说明。",
+            "hint": "告诉 AI 怎么写故事。可用变量：{protagonist} {bystanders} {min_msg} {max_msg} {theme_line} {reference_section} {emoji_instruction}",
             "default": ""
           }
         }
@@ -81,18 +79,16 @@
     "templates": {
       "tpl": {
         "name": "故事模板",
-        "hint": "给 AI 参考的故事范文，让生成的故事更贴近真实群聊风格。也可以用群指令 /sadstory_addtpl 添加。",
+        "hint": "给 AI 参考的故事范文。也可以用群指令 /sadstory_addtpl 添加文件模板。",
         "items": {
           "tpl_name": {
             "description": "模板名称",
             "type": "string",
-            "hint": "给这个模板起个名字。",
             "default": "新模板"
           },
           "enabled": {
             "description": "启用",
             "type": "bool",
-            "hint": "关闭后此模板不会被使用。",
             "default": true
           },
           "content": {
