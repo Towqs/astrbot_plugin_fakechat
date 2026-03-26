@@ -1,4 +1,10 @@
 {
+  "allowed_user_list": {
+    "description": "允许使用的QQ号",
+    "type": "list",
+    "hint": "每条填一个QQ号，只有在列表中的用户才能使用所有指令。留空则所有人都可以使用。",
+    "default": []
+  },
   "cooldown_seconds": {
     "description": "冷却时间（秒）",
     "type": "int",
