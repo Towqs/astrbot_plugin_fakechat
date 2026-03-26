@@ -1,5 +1,10 @@
 # 更新日志
 
+## v0.5.6
+- 修复 /sadstory_aistyle 和 /sadstory_aitpl 报错 AttributeError: get_registered_star_tools_manager
+- 改用 llm_generate 直接生成+解析 JSON，不再依赖已废弃的 func_tools_mgr 参数
+- 移除不再需要的 @filter.llm_tool() 方法（llm_add_writing_style、llm_add_story_template）
+
 ## v0.5.5
 - 统一模板管理：templates/ 目录下的文件模板在初始化时自动导入数据库，所有模板统一通过数据库管理
 - 修复 /sadstory_usetpl 无法操作文件模板的问题（文件模板现在也能启用/禁用）
