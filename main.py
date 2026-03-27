@@ -813,6 +813,23 @@ class SadStoryPlugin(Star):
                     forced_protagonists.append(info)
                 logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
                 theme = re.sub(r'@\S+', '', theme).strip()
+                if len(forced_protagonists) == 1:
+                    at_names = self._extract_at_names_from_plain(event)
+                    if at_names:
+                        pool = self.custom_protagonists + self.custom_bystanders
+                        if self.source_group_id:
+                            pool += self.group_users_map.get(self.source_group_id, [])
+                        pool += self.group_users_map.get(int(group_id_str), [])
+                        existing_ids = {p['user_id'] for p in forced_protagonists}
+                        for name in at_names:
+                            for u in pool:
+                                if u['user_id'] not in existing_ids and (name in u['nickname'] or u['nickname'] in name):
+                                    forced_protagonists.append(u)
+                                    existing_ids.add(u['user_id'])
+                                    logger.info(f"[SadStory] 从 Plain 补充主角: {u['nickname']}")
+                                    break
+                            if len(forced_protagonists) >= 2:
+                                break
             else:
                 at_names = self._extract_at_names_from_plain(event)
                 if at_names:
