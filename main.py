@@ -383,7 +383,10 @@ class SadStoryPlugin(Star):
 
     async def _fetch_group_users(self, bot, group_id: int) -> list:
         try:
-            members = await bot.get_group_member_list(group_id=group_id)
+            members = await asyncio.wait_for(
+                bot.get_group_member_list(group_id=group_id),
+                timeout=30.0
+            )
             users = []
             for m in members:
                 uid = str(m.get("user_id", ""))
@@ -393,14 +396,16 @@ class SadStoryPlugin(Star):
                 users.append({"nickname": nickname, "user_id": uid})
             logger.info(f"[SadStory] 从群 {group_id} 获取到 {len(users)} 个用户")
             return users
+        except asyncio.TimeoutError:
+            logger.error(f"[SadStory] 获取群成员列表超时: group_id={group_id}")
+            return []
         except Exception as e:
             logger.error(f"[SadStory] 获取群成员列表失败: {e}")
             return []
 
-    def _get_available_users(self) -> list:
-        if self.user_pool:
-            return self.user_pool
-        # 虚拟模式：返回预设假角色（灰色头像）
+    def _get_available_users(self, user_pool: list | None = None) -> list:
+        if user_pool:
+            return user_pool
         if self.use_virtual_users:
             return [
                 {"nickname": "路人甲", "user_id": "10001"},
@@ -465,11 +470,15 @@ class SadStoryPlugin(Star):
 
     def _get_at_user_ids(self, event: AiocqhttpMessageEvent) -> list[str]:
         ids = []
+        seen = set()
         all_segs = event.get_messages()
-        logger.info(f"[SadStory] 消息段: {[(type(s).__name__, getattr(s, 'qq', None), getattr(s, 'sender_id', None), getattr(s, 'text', None)[:50] if hasattr(s, 'text') and getattr(s, 'text') else None) for s in all_segs]}")
+        logger.debug(f"[SadStory] 消息段: {[(type(s).__name__, getattr(s, 'qq', None), getattr(s, 'sender_id', None)) for s in all_segs]}")
         for seg in all_segs:
             if isinstance(seg, At) and str(seg.qq) != event.get_self_id():
-                ids.append(str(seg.qq))
+                uid = str(seg.qq)
+                if uid not in seen:
+                    ids.append(uid)
+                    seen.add(uid)
                 if len(ids) >= 2:
                     break
         if not ids:
@@ -507,8 +516,8 @@ class SadStoryPlugin(Star):
             logger.warning(f"[SadStory] get_group_member_info 失败: {e}")
         return {"nickname": f"用户{user_id[-4:]}", "user_id": user_id}
 
-    async def _generate_story(self, event: AiocqhttpMessageEvent, theme: str = "", forced_protagonists: list[dict] | None = None) -> list:
-        users = list(self._get_available_users())  # 拷贝，避免 shuffle 污染共享状态
+    async def _generate_story(self, event: AiocqhttpMessageEvent, theme: str = "", forced_protagonists: list[dict] | None = None, user_pool: list | None = None) -> list:
+        users = list(self._get_available_users(user_pool))
         if len(users) < 2:
             return []
 
@@ -615,27 +624,43 @@ class SadStoryPlugin(Star):
                 timeout=120.0
             )
             raw = llm_resp.completion_text.strip()
-            # 去除 LLM 输出中混入的 bot 日志（时间戳格式：[2026-03-27 09:14:20.159] [Plug] ...）
             raw = re.sub(r'\[[\d]{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\].*', '', raw)
             raw = raw.strip()
 
-            # 使用渐进式解析提取 JSON 数组，找到第一个 [ 后逐步扩展直到成功解析为 list
             start = raw.find("[")
             if start == -1:
                 logger.error("[SadStory] LLM 输出中未找到 JSON 数组")
                 return []
-            story_data = None
-            max_attempts = min(len(raw) - start, 50000)
-            for end_offset in range(1, max_attempts + 1):
-                try:
-                    candidate = raw[start:start + end_offset]
-                    story_data = json.loads(candidate)
-                    if isinstance(story_data, list) and len(story_data) >= self.story_min_messages:
-                        break
-                except json.JSONDecodeError:
-                    pass
-            if story_data is None or not isinstance(story_data, list) or len(story_data) < self.story_min_messages:
-                logger.error(f"[SadStory] JSON 数组提取失败或不足{self.story_min_messages}条, raw[:100]: {raw[:100]}")
+            
+            bracket_stack = []
+            end = -1
+            for i in range(start, len(raw)):
+                if raw[i] == '[':
+                    bracket_stack.append('[')
+                elif raw[i] == '{':
+                    bracket_stack.append('{')
+                elif raw[i] == '}':
+                    if bracket_stack and bracket_stack[-1] == '{':
+                        bracket_stack.pop()
+                elif raw[i] == ']':
+                    if bracket_stack and bracket_stack[-1] == '[':
+                        bracket_stack.pop()
+                        if not bracket_stack:
+                            end = i + 1
+                            break
+            
+            if end == -1:
+                logger.error(f"[SadStory] JSON 数组括号不匹配, raw[:100]: {raw[:100]}")
+                return []
+            
+            try:
+                story_data = json.loads(raw[start:end])
+            except json.JSONDecodeError as e:
+                logger.error(f"[SadStory] JSON 解析失败: {e}, raw[{start}:{end}][:100]: {raw[start:end][:100]}")
+                return []
+            
+            if not isinstance(story_data, list) or len(story_data) < self.story_min_messages:
+                logger.error(f"[SadStory] JSON 数组提取失败或不足{self.story_min_messages}条")
                 return []
 
             # 构建角色映射（使用昵称+user_id双key，避免重名冲突）
@@ -749,10 +774,10 @@ class SadStoryPlugin(Star):
 
     @filter.command("sadstory")
     async def sadstory(self, event: AiocqhttpMessageEvent):
-        """发送一段伪装聊天（合并转发形式）。用法：/sadstory [主题]"""
         if not self._check_permission(event):
             return
 
+        self._reload_config()
         await self._import_webui_data()
 
         group_id_str = event.get_group_id()
@@ -831,13 +856,15 @@ class SadStoryPlugin(Star):
                 if u["user_id"] not in seen_ids:
                     unique_pool.append(u)
                     seen_ids.add(u["user_id"])
-            self.user_pool = unique_pool
+            final_user_pool = unique_pool
+        else:
+            final_user_pool = None
 
-        logger.info(f"[SadStory] 当前用户池大小: {len(self.user_pool)}, 虚拟模式: {self.use_virtual_users}")
+        logger.info(f"[SadStory] 当前用户池大小: {len(final_user_pool) if final_user_pool else 0}, 虚拟模式: {self.use_virtual_users}")
 
         yield event.plain_result("正在生成伪装聊天，请稍候...")
 
-        messages = await self._generate_story(event, theme, forced_protagonists or None)
+        messages = await self._generate_story(event, theme, forced_protagonists or None, final_user_pool)
         if not messages:
             await self._clear_cooldown(group_id_str)
             yield event.plain_result("生成失败了，可能是用户池不足（至少需要2人）或 LLM 服务暂时不可用，请稍后再试~")
@@ -1146,7 +1173,10 @@ class SadStoryPlugin(Star):
                 provider_id = self.chat_provider_id
             else:
                 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
-            llm_resp = await self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt)
+            llm_resp = await asyncio.wait_for(
+                self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt),
+                timeout=120.0
+            )
             raw = llm_resp.completion_text.strip()
             # 提取 JSON
             start = raw.find("{")
@@ -1215,7 +1245,10 @@ class SadStoryPlugin(Star):
                 provider_id = self.chat_provider_id
             else:
                 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
-            llm_resp = await self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt)
+            llm_resp = await asyncio.wait_for(
+                self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt),
+                timeout=120.0
+            )
             raw = llm_resp.completion_text.strip()
             start = raw.find("{")
             end = raw.rfind("}") + 1

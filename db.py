@@ -1,14 +1,15 @@
+import asyncio
 import aiosqlite
 from pathlib import Path
 from astrbot.api import logger
 
 
 class SadStoryDB:
-    """写作风格和故事模板的 SQLite 存储"""
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._conn = None
+        self._tx_lock = asyncio.Lock()
 
     async def init(self):
         try:
@@ -46,9 +47,14 @@ class SadStoryDB:
             self._conn = None
 
     def _ensure_conn(self):
-        """确保数据库连接已初始化"""
         if self._conn is None:
             raise RuntimeError("[SadStory] 数据库未初始化，请先调用 init()")
+
+    async def _safe_rollback(self):
+        try:
+            await self._conn.rollback()
+        except Exception as e:
+            logger.warning(f"[SadStory] rollback 失败（可忽略）: {e}")
 
     # ========== 写作风格 ==========
 
@@ -78,21 +84,22 @@ class SadStoryDB:
 
     async def toggle_style(self, style_id: int) -> tuple[str, bool] | None:
         self._ensure_conn()
-        try:
-            await self._conn.execute("BEGIN IMMEDIATE")
-            async with self._conn.execute("SELECT name, enabled FROM writing_styles WHERE id=?", (style_id,)) as cur:
-                row = await cur.fetchone()
-            if not row:
-                await self._conn.rollback()
-                return None
-            new_enabled = 1 - int(row["enabled"])
-            await self._conn.execute("UPDATE writing_styles SET enabled=? WHERE id=?", (new_enabled, style_id))
-            await self._conn.commit()
-            return (row["name"], bool(new_enabled))
-        except Exception as e:
-            await self._conn.rollback()
-            logger.error(f"[SadStory] toggle_style(id={style_id}) 失败: {e}")
-            raise
+        async with self._tx_lock:
+            try:
+                await self._conn.execute("BEGIN IMMEDIATE")
+                async with self._conn.execute("SELECT name, enabled FROM writing_styles WHERE id=?", (style_id,)) as cur:
+                    row = await cur.fetchone()
+                if not row:
+                    await self._safe_rollback()
+                    return None
+                new_enabled = 1 - int(row["enabled"])
+                await self._conn.execute("UPDATE writing_styles SET enabled=? WHERE id=?", (new_enabled, style_id))
+                await self._conn.commit()
+                return (row["name"], bool(new_enabled))
+            except Exception as e:
+                await self._safe_rollback()
+                logger.error(f"[SadStory] toggle_style(id={style_id}) 失败: {e}")
+                raise
 
     async def delete_style(self, style_id: int) -> str | None:
         self._ensure_conn()
@@ -142,21 +149,22 @@ class SadStoryDB:
 
     async def toggle_template(self, tpl_id: int) -> tuple[str, bool] | None:
         self._ensure_conn()
-        try:
-            await self._conn.execute("BEGIN IMMEDIATE")
-            async with self._conn.execute("SELECT name, enabled FROM story_templates WHERE id=?", (tpl_id,)) as cur:
-                row = await cur.fetchone()
-            if not row:
-                await self._conn.rollback()
-                return None
-            new_enabled = 1 - int(row["enabled"])
-            await self._conn.execute("UPDATE story_templates SET enabled=? WHERE id=?", (new_enabled, tpl_id))
-            await self._conn.commit()
-            return (row["name"], bool(new_enabled))
-        except Exception as e:
-            await self._conn.rollback()
-            logger.error(f"[SadStory] toggle_template(id={tpl_id}) 失败: {e}")
-            raise
+        async with self._tx_lock:
+            try:
+                await self._conn.execute("BEGIN IMMEDIATE")
+                async with self._conn.execute("SELECT name, enabled FROM story_templates WHERE id=?", (tpl_id,)) as cur:
+                    row = await cur.fetchone()
+                if not row:
+                    await self._safe_rollback()
+                    return None
+                new_enabled = 1 - int(row["enabled"])
+                await self._conn.execute("UPDATE story_templates SET enabled=? WHERE id=?", (new_enabled, tpl_id))
+                await self._conn.commit()
+                return (row["name"], bool(new_enabled))
+            except Exception as e:
+                await self._safe_rollback()
+                logger.error(f"[SadStory] toggle_template(id={tpl_id}) 失败: {e}")
+                raise
 
     async def delete_template(self, tpl_id: int) -> str | None:
         self._ensure_conn()

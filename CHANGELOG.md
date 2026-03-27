@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.6.16
+- 修复 self.user_pool 并发竞态问题，改为局部变量传入 _generate_story
+- 修复配置变更实时性问题，sadstory 命令入口先刷新配置
+- 修复虚拟用户模式脏状态风险
+- 添加 _fetch_group_users (30s) 和 AI 生成 (120s) 超时控制
+- 优化 JSON 提取逻辑，从 O(n²) 改为 O(n) 括号栈匹配
+- 修复 @主角解析去重问题，避免同一用户触发双主角模式
+- 日志降级为 debug，避免泄露群消息内容
+- db.py 添加事务锁保护，防止并发事务污染
+- rollback 添加异常保护，避免覆盖原始错误栈
+
 ## v0.6.15
 - 修复 db.py toggle_style/toggle_template 事务缺少 commit 导致状态不落盘的问题
 - 用户池按 user_id 去重，避免重复角色分配异常
