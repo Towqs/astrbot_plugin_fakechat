@@ -226,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.8")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.9")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -611,28 +611,21 @@ class SadStoryPlugin(Star):
             )
             raw = llm_resp.completion_text.strip()
 
-            # 使用栈匹配括号，一次性提取 JSON 数组
+            # 使用渐进式解析提取 JSON 数组，找到第一个 [ 后逐步扩展直到成功解析为 list
             start = raw.find("[")
             if start == -1:
                 logger.error("[SadStory] LLM 输出中未找到 JSON 数组")
                 return []
-            depth = 0
-            end = start
-            for i, ch in enumerate(raw[start:], start):
-                if ch == "{":
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        end = i + 1
-                        break
             story_data = None
-            if depth == 0 and end > start:
+            max_attempts = min(len(raw) - start, 50000)
+            for end_offset in range(1, max_attempts + 1):
                 try:
-                    story_data = json.loads(raw[start:end])
-                except json.JSONDecodeError as e:
-                    logger.error(f"[SadStory] JSON 解析失败: {e}, raw: {raw[:200]}")
-                    return []
+                    candidate = raw[start:start + end_offset]
+                    story_data = json.loads(candidate)
+                    if isinstance(story_data, list):
+                        break
+                except json.JSONDecodeError:
+                    pass
             if story_data is None or not isinstance(story_data, list):
                 logger.error(f"[SadStory] JSON 数组提取失败或格式错误, raw[:100]: {raw[:100]}")
                 return []
