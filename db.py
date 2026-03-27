@@ -18,7 +18,7 @@ class SadStoryDB:
             await self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS writing_styles (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
+                    name TEXT NOT NULL UNIQUE,
                     enabled INTEGER NOT NULL DEFAULT 1,
                     content TEXT NOT NULL
                 )
@@ -26,7 +26,7 @@ class SadStoryDB:
             await self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS story_templates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL,
+                    name TEXT NOT NULL UNIQUE,
                     enabled INTEGER NOT NULL DEFAULT 1,
                     content TEXT NOT NULL
                 )
@@ -64,14 +64,17 @@ class SadStoryDB:
         async with self._conn.execute("SELECT content FROM writing_styles WHERE enabled=1") as cur:
             return [r["content"] async for r in cur]
 
-    async def add_style(self, name: str, content: str, enabled: bool = True) -> int:
+    async def add_style(self, name: str, content: str, enabled: bool = True) -> int | None:
         self._ensure_conn()
-        cur = await self._conn.execute(
-            "INSERT INTO writing_styles (name, enabled, content) VALUES (?, ?, ?)",
-            (name, int(enabled), content)
-        )
-        await self._conn.commit()
-        return cur.lastrowid
+        try:
+            cur = await self._conn.execute(
+                "INSERT INTO writing_styles (name, enabled, content) VALUES (?, ?, ?)",
+                (name, int(enabled), content)
+            )
+            await self._conn.commit()
+            return cur.lastrowid
+        except aiosqlite.IntegrityError:
+            return None
 
     async def toggle_style(self, style_id: int) -> tuple[str, bool] | None:
         """切换启用状态，返回 (name, new_enabled) 或 None"""
@@ -115,14 +118,17 @@ class SadStoryDB:
         async with self._conn.execute("SELECT 1 FROM story_templates WHERE name=?", (name,)) as cur:
             return await cur.fetchone() is not None
 
-    async def add_template(self, name: str, content: str, enabled: bool = True) -> int:
+    async def add_template(self, name: str, content: str, enabled: bool = True) -> int | None:
         self._ensure_conn()
-        cur = await self._conn.execute(
-            "INSERT INTO story_templates (name, enabled, content) VALUES (?, ?, ?)",
-            (name, int(enabled), content)
-        )
-        await self._conn.commit()
-        return cur.lastrowid
+        try:
+            cur = await self._conn.execute(
+                "INSERT INTO story_templates (name, enabled, content) VALUES (?, ?, ?)",
+                (name, int(enabled), content)
+            )
+            await self._conn.commit()
+            return cur.lastrowid
+        except aiosqlite.IntegrityError:
+            return None
 
     async def toggle_template(self, tpl_id: int) -> tuple[str, bool] | None:
         self._ensure_conn()

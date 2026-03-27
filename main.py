@@ -7,13 +7,12 @@ import time
 from pathlib import Path
 
 from astrbot.api.event import filter
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, register, StarTools
 from astrbot.api import logger
 from astrbot.core.message.components import At, Reply
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
 )
-from astrbot.core.star.star_tools import StarTools
 
 from astrbot.api import AstrBotConfig
 from .db import SadStoryDB
@@ -227,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.1")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.2")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -429,9 +428,10 @@ class SadStoryPlugin(Star):
                 return True
             return False
 
-    def _clear_cooldown(self, group_id: str):
-        """清除冷却（生成失败时调用）"""
-        self.cooldown_map.pop(group_id, None)
+    async def _clear_cooldown(self, group_id: str):
+        """清除冷却（生成失败时调用），加锁保持一致性"""
+        async with self._cooldown_lock:
+            self.cooldown_map.pop(group_id, None)
 
     def _check_permission(self, event: AiocqhttpMessageEvent) -> bool:
         """检查用户是否有权限使用指令。列表为空则所有人可用。"""
@@ -595,7 +595,6 @@ class SadStoryPlugin(Star):
             raw = llm_resp.completion_text.strip()
 
             # 使用正则提取JSON数组，更健壮
-            import re
             json_match = re.search(r'\[(?:\s|\n)*\{.*\}(?:\s|\n)*\]', raw, re.DOTALL)
             if json_match:
                 story_data = json.loads(json_match.group(0))
@@ -769,7 +768,7 @@ class SadStoryPlugin(Star):
 
         messages = await self._generate_story(event, theme, forced_protagonists or None)
         if not messages:
-            self._clear_cooldown(group_id_str)
+            await self._clear_cooldown(group_id_str)
             yield event.plain_result("生成失败了，可能是用户池不足（至少需要2人）或 LLM 服务暂时不可用，请稍后再试~")
             return
 
@@ -781,7 +780,7 @@ class SadStoryPlugin(Star):
             )
         except Exception as e:
             logger.error(f"[SadStory] 发送合并转发失败: {e}")
-            self._clear_cooldown(group_id_str)
+            await self._clear_cooldown(group_id_str)
             yield event.plain_result(f"发送失败了: {e}")
 
     @filter.command("sadstory_reload")
@@ -824,7 +823,14 @@ class SadStoryPlugin(Star):
             yield event.plain_result("模板内容不能为空，请在模板名后换行输入故事内容")
             return
 
+        if len(content) > 10000:
+            yield event.plain_result("模板内容过长，请控制在 10000 字以内")
+            return
+
         tpl_id = await self.db.add_template(first_line, content)
+        if tpl_id is None:
+            yield event.plain_result(f"模板「{first_line}」已存在，请使用新名称")
+            return
         yield event.plain_result(f"模板「{first_line}」已保存到数据库（ID:{tpl_id}，{len(content)}字）")
 
     @filter.command("sadstory_listtpl")
@@ -981,7 +987,13 @@ class SadStoryPlugin(Star):
         if not content:
             yield event.plain_result("写作指令不能为空，请在风格名后换行输入")
             return
+        if len(content) > 5000:
+            yield event.plain_result("写作指令过长，请控制在 5000 字以内")
+            return
         sid = await self.db.add_style(first_line, content)
+        if sid is None:
+            yield event.plain_result(f"风格「{first_line}」已存在，请使用新名称")
+            return
         yield event.plain_result(f"风格「{first_line}」已保存（ID:{sid}，{len(content)}字）")
 
     @filter.command("sadstory_usestyle")

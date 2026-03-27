@@ -1,5 +1,13 @@
 # 更新日志
 
+## v0.6.2
+- StarTools 导入路径改为 astrbot.api.star，符合框架规范
+- 移除 _generate_story 内重复 import re
+- _clear_cooldown 改为异步加锁，与 _check_and_set_cooldown 保持一致
+- 模板内容上限 10000 字，风格内容上限 5000 字
+- 数据库 name 字段添加 UNIQUE 约束，防止重复命名
+- 添加/风格命令重复名称时返回友好提示
+
 ## v0.6.1
 - 代码质量审核修复：
   - 角色映射改用 nickname + user_id 双 key，新增模糊匹配兜底，解决重名冲突
