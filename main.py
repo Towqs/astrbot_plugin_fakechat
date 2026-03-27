@@ -403,6 +403,33 @@ class SadStoryPlugin(Star):
             logger.error(f"[SadStory] 获取群成员列表失败: {e}")
             return []
 
+    async def _fetch_random_bystanders(self, bot, group_id: int, count: int, exclude_ids: set) -> list:
+        """随机抽样获取旁观者，避免加载全部成员"""
+        try:
+            members = await asyncio.wait_for(
+                bot.get_group_member_list(group_id=group_id),
+                timeout=30.0
+            )
+            candidates = []
+            for m in members:
+                uid = str(m.get("user_id", ""))
+                if uid in exclude_ids:
+                    continue
+                nickname = m.get("card", "") if self.use_card_as_name else ""
+                if not nickname:
+                    nickname = m.get("nickname", f"用户{uid[-4:]}")
+                candidates.append({"nickname": nickname, "user_id": uid})
+            random.shuffle(candidates)
+            result = candidates[:count]
+            logger.info(f"[SadStory] 从群 {group_id} 随机抽样 {len(result)} 个旁观者")
+            return result
+        except asyncio.TimeoutError:
+            logger.error(f"[SadStory] 获取群成员列表超时: group_id={group_id}")
+            return []
+        except Exception as e:
+            logger.error(f"[SadStory] 获取群成员列表失败: {e}")
+            return []
+
     def _get_available_users(self, user_pool: list | None = None) -> list:
         if user_pool:
             return user_pool
@@ -858,46 +885,53 @@ class SadStoryPlugin(Star):
                     theme = re.sub(r'@\S+', '', theme).strip()
 
             if not self.use_virtual_users:
-                pool = self.custom_protagonists + self.custom_bystanders
-                if self.source_group_id:
-                    pool += self.group_users_map.get(self.source_group_id, [])
-                if len(pool) < 2 and group_id != self.source_group_id:
-                    pool += self.group_users_map.get(group_id, [])
-                if len(pool) < 2:
-                    need_fetch = False
-                    async with self._group_users_lock:
-                        if group_id not in self.group_users_map:
-                            need_fetch = True
-                    if need_fetch:
-                        fetched = await self._fetch_group_users(event.bot, group_id)
-                        if fetched:
-                            async with self._group_users_lock:
-                                self.group_users_map[group_id] = fetched
-                    pool += self.group_users_map.get(group_id, [])
-                if forced_protagonists:
-                    existing_ids = {u["user_id"] for u in pool}
-                    for fp in forced_protagonists:
-                        if fp["user_id"] not in existing_ids:
-                            pool.append(fp)
-                            existing_ids.add(fp["user_id"])
-                member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
-                custom_pool = []
-                custom_ids = {u["user_id"] for u in self.custom_protagonists + self.custom_bystanders}
-                for user in self.custom_protagonists + self.custom_bystanders:
-                    user_copy = {"user_id": user["user_id"], "nickname": user.get("nickname", "")}
-                    if not user_copy["nickname"] and user_copy["user_id"] in member_map:
-                        user_copy["nickname"] = member_map[user_copy["user_id"]]["nickname"]
-                    if not user_copy["nickname"]:
-                        user_copy["nickname"] = f"用户{user_copy['user_id'][-4:]}"
-                    custom_pool.append(user_copy)
-                pool = custom_pool + [u for u in pool if u["user_id"] not in custom_ids]
-                seen_ids = set()
-                unique_pool = []
-                for u in pool:
-                    if u["user_id"] not in seen_ids:
-                        unique_pool.append(u)
-                        seen_ids.add(u["user_id"])
-                final_user_pool = unique_pool
+                is_dual_mode = len(forced_protagonists) == 2
+                if is_dual_mode:
+                    exclude_ids = {p["user_id"] for p in forced_protagonists}
+                    bystander_needed = self.bystander_count + 5
+                    bystanders = await self._fetch_random_bystanders(event.bot, group_id, bystander_needed, exclude_ids)
+                    final_user_pool = forced_protagonists + bystanders
+                else:
+                    pool = self.custom_protagonists + self.custom_bystanders
+                    if self.source_group_id:
+                        pool += self.group_users_map.get(self.source_group_id, [])
+                    if len(pool) < 2 and group_id != self.source_group_id:
+                        pool += self.group_users_map.get(group_id, [])
+                    if len(pool) < 2:
+                        need_fetch = False
+                        async with self._group_users_lock:
+                            if group_id not in self.group_users_map:
+                                need_fetch = True
+                        if need_fetch:
+                            fetched = await self._fetch_group_users(event.bot, group_id)
+                            if fetched:
+                                async with self._group_users_lock:
+                                    self.group_users_map[group_id] = fetched
+                        pool += self.group_users_map.get(group_id, [])
+                    if forced_protagonists:
+                        existing_ids = {u["user_id"] for u in pool}
+                        for fp in forced_protagonists:
+                            if fp["user_id"] not in existing_ids:
+                                pool.append(fp)
+                                existing_ids.add(fp["user_id"])
+                    member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
+                    custom_pool = []
+                    custom_ids = {u["user_id"] for u in self.custom_protagonists + self.custom_bystanders}
+                    for user in self.custom_protagonists + self.custom_bystanders:
+                        user_copy = {"user_id": user["user_id"], "nickname": user.get("nickname", "")}
+                        if not user_copy["nickname"] and user_copy["user_id"] in member_map:
+                            user_copy["nickname"] = member_map[user_copy["user_id"]]["nickname"]
+                        if not user_copy["nickname"]:
+                            user_copy["nickname"] = f"用户{user_copy['user_id'][-4:]}"
+                        custom_pool.append(user_copy)
+                    pool = custom_pool + [u for u in pool if u["user_id"] not in custom_ids]
+                    seen_ids = set()
+                    unique_pool = []
+                    for u in pool:
+                        if u["user_id"] not in seen_ids:
+                            unique_pool.append(u)
+                            seen_ids.add(u["user_id"])
+                    final_user_pool = unique_pool
             else:
                 final_user_pool = None
 
