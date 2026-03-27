@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.6.8
+- 双主角模式支持无旁观者（仅两人）场景
+- JSON 解析改为 O(n) 括号栈匹配，替代 O(n²) 逐字符扩展
+- 配置参数加范围校验：消息数 1~100、旁观者 0~20、cooldown ≥ 0，min/max 互纠
+- 冷却计时改用 time.monotonic()，不受系统时钟影响
+- ai_add_style 加 5000 字上限截断
+- cooldown_map 惰性清理过期项，防止内存膨胀
+- toggle_style/toggle_template 改为 BEGIN IMMEDIATE 原子事务
+
 ## v0.6.7
 - reload_users 命令加 _group_users_lock 保护，移除冗余 _reload_config 调用
 

@@ -226,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.7")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.8")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -264,10 +264,12 @@ class SadStoryPlugin(Star):
 
         self.source_group_id = self._parse_int(cfg.get("source_group_id", ""), 0)
         self.use_card_as_name = self._parse_bool(cfg.get("use_card_as_name", True))
-        self.cooldown_seconds = self._parse_int(cfg.get("cooldown_seconds", ""), 60)
-        self.story_min_messages = self._parse_int(cfg.get("story_min_messages", ""), 30)
-        self.story_max_messages = self._parse_int(cfg.get("story_max_messages", ""), 80)
-        self.bystander_count = self._parse_int(cfg.get("bystander_count", ""), 3)
+        self.cooldown_seconds = max(0, self._parse_int(cfg.get("cooldown_seconds", ""), 60))
+        self.story_min_messages = self._clamp(self._parse_int(cfg.get("story_min_messages", ""), 30), 1, 100)
+        self.story_max_messages = self._clamp(self._parse_int(cfg.get("story_max_messages", ""), 80), 1, 100)
+        if self.story_min_messages > self.story_max_messages:
+            self.story_min_messages, self.story_max_messages = self.story_max_messages, self.story_min_messages
+        self.bystander_count = self._clamp(self._parse_int(cfg.get("bystander_count", ""), 3), 0, 20)
         self.chat_provider_id = str(cfg.get("chat_provider_id", "")).strip()
         self.use_virtual_users = self._parse_bool(cfg.get("use_virtual_users", False))
         self.use_story_template = self._parse_bool(cfg.get("use_story_template", True))
@@ -367,6 +369,10 @@ class SadStoryPlugin(Star):
             logger.info(f"[SadStory] 从 templates/ 目录导入了 {imported} 个文件模板到数据库")
 
     @staticmethod
+    def _clamp(value: int, lo: int, hi: int) -> int:
+        return max(lo, min(value, hi))
+
+    @staticmethod
     def _parse_int(s, default: int = 0) -> int:
         try:
             return int(s) if s is not None and str(s).strip() else default
@@ -426,9 +432,13 @@ class SadStoryPlugin(Star):
         if self.cooldown_seconds <= 0:
             return True
         async with self._cooldown_lock:
+            expired = [gid for gid, last in self.cooldown_map.items()
+                      if (time.monotonic() - last) >= self.cooldown_seconds]
+            for gid in expired:
+                self.cooldown_map.pop(gid, None)
             last = self.cooldown_map.get(group_id, 0)
-            if (time.time() - last) >= self.cooldown_seconds:
-                self.cooldown_map[group_id] = time.time()
+            if (time.monotonic() - last) >= self.cooldown_seconds:
+                self.cooldown_map[group_id] = time.monotonic()
                 return True
             return False
 
@@ -508,22 +518,25 @@ class SadStoryPlugin(Star):
         if dual_mode:
             protagonist_a, protagonist_b = forced_protagonists[0], forced_protagonists[1]
             other_users = [u for u in users if u["user_id"] not in {protagonist_a["user_id"], protagonist_b["user_id"]}]
+            bystander_count = min(self.bystander_count, len(other_users)) if other_users else 0
         # 单主角模式（强制指定）
         elif forced_protagonists and len(forced_protagonists) == 1:
             protagonist = forced_protagonists[0]
             other_users = [u for u in users if u["user_id"] != protagonist["user_id"]]
+            bystander_count = max(1, min(self.bystander_count, len(other_users)))
         # 单主角模式（配置指定）
         elif self.custom_protagonists:
             protagonist = random.choice(self.custom_protagonists)
             other_users = [u for u in users if u["user_id"] != protagonist["user_id"]]
+            bystander_count = max(1, min(self.bystander_count, len(other_users)))
         # 单主角模式（随机）
         else:
             random.shuffle(users)
             protagonist = users[0]
             other_users = users[1:]
+            bystander_count = max(1, min(self.bystander_count, len(other_users)))
 
-        bystander_count = max(1, min(self.bystander_count, len(other_users)))  # 至少1个旁观者
-        if not other_users:
+        if not other_users and not dual_mode:
             return []
         random.shuffle(other_users)
         bystanders = other_users[:bystander_count]
@@ -598,26 +611,31 @@ class SadStoryPlugin(Star):
             )
             raw = llm_resp.completion_text.strip()
 
-            # 从第一个 [ 开始，渐进式扩展尝试解析JSON数组
+            # 使用栈匹配括号，一次性提取 JSON 数组
             start = raw.find("[")
             if start == -1:
                 logger.error("[SadStory] LLM 输出中未找到 JSON 数组")
                 return []
-            story_data = None
-            for end_offset in range(1, len(raw) - start + 1):
-                try:
-                    candidate = raw[start:start + end_offset]
-                    story_data = json.loads(candidate)
-                    if isinstance(story_data, list):
+            depth = 0
+            end = start
+            for i, ch in enumerate(raw[start:], start):
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
                         break
-                except json.JSONDecodeError:
-                    continue
-            if story_data is None:
+            story_data = None
+            if depth == 0 and end > start:
                 try:
-                    story_data = json.loads(raw[start:])
+                    story_data = json.loads(raw[start:end])
                 except json.JSONDecodeError as e:
                     logger.error(f"[SadStory] JSON 解析失败: {e}, raw: {raw[:200]}")
                     return []
+            if story_data is None or not isinstance(story_data, list):
+                logger.error(f"[SadStory] JSON 数组提取失败或格式错误, raw[:100]: {raw[:100]}")
+                return []
 
             # 构建角色映射（使用昵称+user_id双key，避免重名冲突）
             role_map = {}
@@ -1112,6 +1130,9 @@ class SadStoryPlugin(Star):
             if missing:
                 yield event.plain_result(f"AI 生成的风格缺少必需变量 {', '.join(missing)}，请重试或手动添加")
                 return
+            if len(style_content) > 5000:
+                style_content = style_content[:5000]
+                logger.warning("[SadStory] AI 生成风格内容超过5000字，已截断")
             sid = await self.db.add_style(style_name, style_content)
             if sid is None:
                 yield event.plain_result(f"风格「{style_name}」已存在，请使用新描述重试")
