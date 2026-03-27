@@ -226,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.5")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.6")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -236,6 +236,7 @@ class SadStoryPlugin(Star):
         self.cooldown_map = {}
         self._cooldown_lock = asyncio.Lock()
         self._import_lock = asyncio.Lock()
+        self._group_users_lock = asyncio.Lock()
         data_dir = StarTools.get_data_dir("astrbot_plugin_sadstory")
         self.db = SadStoryDB(Path(data_dir) / "sadstory.db")
 
@@ -357,10 +358,11 @@ class SadStoryPlugin(Star):
                 with open(fpath, "r", encoding="utf-8") as f:
                     content = f.read().strip()
                 if content:
-                    await self.db.add_template(name, content, enabled=True)
-                    imported += 1
+                    tpl_id = await self.db.add_template(name, content, enabled=True)
+                    if tpl_id is not None:
+                        imported += 1
             except Exception as e:
-                logger.warning(f"[SadStory] 导入文件模板 {fname} 失败: {e}")
+                logger.warning(f"[SadStory] 导入文件模板 {fname} 失败：{e}")
         if imported:
             logger.info(f"[SadStory] 从 templates/ 目录导入了 {imported} 个文件模板到数据库")
 
@@ -726,8 +728,6 @@ class SadStoryPlugin(Star):
     @filter.command("sadstory")
     async def sadstory(self, event: AiocqhttpMessageEvent):
         """发送一段伪装聊天（合并转发形式）。用法：/sadstory [主题]"""
-        self._reload_config()
-
         if not self._check_permission(event):
             return
 
@@ -762,17 +762,21 @@ class SadStoryPlugin(Star):
         if not self.use_virtual_users:
             # 如果素材群有配置且用户池为空，尝试拉取
             if self.source_group_id and not self.group_users:
-                fetched = await self._fetch_group_users(event.bot, self.source_group_id)
-                if fetched:
-                    self.group_users = fetched
-                    self._resolve_qq_lists(fetched)
+                async with self._group_users_lock:
+                    if not self.group_users:  # 双重检查
+                        fetched = await self._fetch_group_users(event.bot, self.source_group_id)
+                        if fetched:
+                            self.group_users = fetched
+                            self._resolve_qq_lists(fetched)
 
             # 如果用户池仍为空，从当前群拉取真实成员
             if not self.user_pool:
-                fetched = await self._fetch_group_users(event.bot, int(group_id_str))
-                if fetched:
-                    self.group_users = fetched
-                    self._resolve_qq_lists(fetched)
+                async with self._group_users_lock:
+                    if not self.user_pool:  # 双重检查
+                        fetched = await self._fetch_group_users(event.bot, int(group_id_str))
+                        if fetched:
+                            self.group_users = fetched
+                            self._resolve_qq_lists(fetched)
 
         logger.info(f"[SadStory] 当前用户池大小: {len(self.user_pool)}, 虚拟模式: {self.use_virtual_users}")
 

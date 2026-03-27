@@ -1,5 +1,10 @@
 # 更新日志
 
+## v0.6.6
+- 移除 sadstory 命令的冗余 _reload_config 调用，防止并发下用户池被意外重置
+- _fetch_group_users 加锁保护（_group_users_lock），防止并发写入冲突
+- _import_file_templates 的 add_template 返回 None 时正确跳过计数
+
 ## v0.6.5
 - ai_add_style/add_template 的 UNIQUE 冲突返回 None 未处理
 - ai_add_template 缺少内容上限（10000字）检查
