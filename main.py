@@ -480,6 +480,17 @@ class SadStoryPlugin(Star):
         logger.debug(f"[SadStory] 解析到的 at_ids: {ids}")
         return ids
 
+    def _extract_at_names_from_plain(self, event: AiocqhttpMessageEvent) -> list[str]:
+        names = []
+        for seg in event.get_messages():
+            if hasattr(seg, 'text') and seg.text:
+                at_matches = re.findall(r'@([^\s@]+)', seg.text)
+                names.extend(at_matches[:2 - len(names)])
+                if len(names) >= 2:
+                    break
+        logger.info(f"[SadStory] 从 Plain 提取的 @昵称: {names}")
+        return names
+
 
     async def _resolve_user_info(self, bot, group_id: int, user_id: str) -> dict:
         """根据 user_id 获取昵称信息"""
@@ -757,8 +768,22 @@ class SadStoryPlugin(Star):
                 info = await self._resolve_user_info(event.bot, int(group_id_str), uid)
                 forced_protagonists.append(info)
             logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
-            # 精确去除 theme 中所有 @提及 和多余空格
             theme = re.sub(r'@\S+', '', theme).strip()
+        else:
+            at_names = self._extract_at_names_from_plain(event)
+            if at_names:
+                pool = self.custom_protagonists + self.custom_bystanders
+                if self.source_group_id:
+                    pool += self.group_users_map.get(self.source_group_id, [])
+                pool += self.group_users_map.get(int(group_id_str), [])
+                for name in at_names:
+                    for u in pool:
+                        if name in u['nickname'] or u['nickname'] in name:
+                            if u not in forced_protagonists:
+                                forced_protagonists.append(u)
+                            break
+                logger.info(f"[SadStory] 从 Plain 匹配的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
+                theme = re.sub(r'@\S+', '', theme).strip()
 
         # 虚拟模式下跳过素材群拉取
         group_id = int(group_id_str)
