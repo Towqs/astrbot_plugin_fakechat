@@ -479,6 +479,7 @@ class SadStoryPlugin(Star):
                 if isinstance(seg, Reply) and seg.sender_id:
                     ids.append(str(seg.sender_id))
                     break
+        logger.info(f"[SadStory] 消息段: {[(type(s).__name__, getattr(s, 'qq', None), getattr(s, 'sender_id', None)) for s in all_segs]}")
         logger.debug(f"[SadStory] 解析到的 at_ids: {ids}")
         return ids
 
