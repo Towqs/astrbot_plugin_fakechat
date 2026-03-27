@@ -226,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.11")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.12")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -756,8 +756,9 @@ class SadStoryPlugin(Star):
             for uid in at_ids:
                 info = await self._resolve_user_info(event.bot, int(group_id_str), uid)
                 forced_protagonists.append(info)
-            # 精确去除 theme 中的 @ 提及文本
-            theme = ' '.join(part for part in theme.split(' @') if part.strip())
+            logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
+            # 精确去除 theme 中所有 @提及 和多余空格
+            theme = re.sub(r'@\S+', '', theme).strip()
 
         # 虚拟模式下跳过素材群拉取
         group_id = int(group_id_str)
@@ -774,6 +775,13 @@ class SadStoryPlugin(Star):
                         if fetched:
                             self.group_users_map[group_id] = fetched
                 pool += self.group_users_map.get(group_id, [])
+            # @指定的主角强制加入用户池（若不在池中）
+            if forced_protagonists:
+                existing_ids = {u["user_id"] for u in pool}
+                for fp in forced_protagonists:
+                    if fp["user_id"] not in existing_ids:
+                        pool.append(fp)
+                        existing_ids.add(fp["user_id"])
             # 补充自定义角色的昵称（如果未填写）
             member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
             for user in self.custom_protagonists + self.custom_bystanders:
