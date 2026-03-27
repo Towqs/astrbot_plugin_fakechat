@@ -269,7 +269,7 @@ class SadStoryPlugin(Star):
         self.story_max_messages = self._clamp(self._parse_int(cfg.get("story_max_messages", ""), 80), 1, 100)
         if self.story_min_messages > self.story_max_messages:
             self.story_min_messages, self.story_max_messages = self.story_max_messages, self.story_min_messages
-        self.bystander_count = self._clamp(self._parse_int(cfg.get("bystander_count", ""), 3), 0, 20)
+        self.bystander_count = self._clamp(self._parse_int(cfg.get("bystander_count", ""), 3), 0, 10)
         self.chat_provider_id = str(cfg.get("chat_provider_id", "")).strip()
         self.use_virtual_users = self._parse_bool(cfg.get("use_virtual_users", False))
         self.use_story_template = self._parse_bool(cfg.get("use_story_template", True))

@@ -1,7 +1,7 @@
 name: astrbot_plugin_sadstory
 display_name: 伪装聊天
 desc: 在群聊中以合并转发消息的形式展示伪装聊天，支持 LLM 生成、Prompt 风格管理、故事模板参考、自定义角色等
-version: v0.6.22
+version: v0.6.23
 author: Towqs
 repo: https://github.com/Towqs/astrbot_plugin_fakechat
 support_platforms:

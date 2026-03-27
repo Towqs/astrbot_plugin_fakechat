@@ -30,7 +30,7 @@
     "description": "围观网友数量",
     "type": "int",
     "hint": "穿插评论的围观网友人数。",
-    "slider": { "min": 1, "max": 8, "step": 1 },
+    "slider": { "min": 1, "max": 10, "step": 1 },
     "default": 3
   },
   "use_face_emoji": {
