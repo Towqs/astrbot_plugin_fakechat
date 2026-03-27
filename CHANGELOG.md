@@ -1,5 +1,12 @@
 # 更新日志
 
+## v0.6.15
+- 修复 db.py toggle_style/toggle_template 事务缺少 commit 导致状态不落盘的问题
+- 用户池按 user_id 去重，避免重复角色分配异常
+- 添加网络请求超时控制：get_group_member_info 10s、llm_generate 120s
+- 修复最小消息数约束校验，使用 story_min_messages 替代硬编码 2
+- 改进异常处理日志，添加更多上下文信息
+
 ## v0.6.14
 - 修复 @ 艾特未被解析为 At 组件时双主角失效的问题
 - 从 Plain 文本提取 @ 昵称并在用户池中模糊匹配

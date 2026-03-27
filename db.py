@@ -77,18 +77,20 @@ class SadStoryDB:
             return None
 
     async def toggle_style(self, style_id: int) -> tuple[str, bool] | None:
-        """切换启用状态（原子操作），返回 (name, new_enabled) 或 None"""
         self._ensure_conn()
         try:
-            async with self._conn.execute("BEGIN IMMEDIATE"):
-                async with self._conn.execute("SELECT name, enabled FROM writing_styles WHERE id=?", (style_id,)) as cur:
-                    row = await cur.fetchone()
-                if not row:
-                    return None
-                new_enabled = 1 - int(row["enabled"])
-                await self._conn.execute("UPDATE writing_styles SET enabled=? WHERE id=?", (new_enabled, style_id))
+            await self._conn.execute("BEGIN IMMEDIATE")
+            async with self._conn.execute("SELECT name, enabled FROM writing_styles WHERE id=?", (style_id,)) as cur:
+                row = await cur.fetchone()
+            if not row:
+                await self._conn.rollback()
+                return None
+            new_enabled = 1 - int(row["enabled"])
+            await self._conn.execute("UPDATE writing_styles SET enabled=? WHERE id=?", (new_enabled, style_id))
+            await self._conn.commit()
             return (row["name"], bool(new_enabled))
         except Exception as e:
+            await self._conn.rollback()
             logger.error(f"[SadStory] toggle_style(id={style_id}) 失败: {e}")
             raise
 
@@ -139,18 +141,20 @@ class SadStoryDB:
             return None
 
     async def toggle_template(self, tpl_id: int) -> tuple[str, bool] | None:
-        """切换启用状态（原子操作），返回 (name, new_enabled) 或 None"""
         self._ensure_conn()
         try:
-            async with self._conn.execute("BEGIN IMMEDIATE"):
-                async with self._conn.execute("SELECT name, enabled FROM story_templates WHERE id=?", (tpl_id,)) as cur:
-                    row = await cur.fetchone()
-                if not row:
-                    return None
-                new_enabled = 1 - int(row["enabled"])
-                await self._conn.execute("UPDATE story_templates SET enabled=? WHERE id=?", (new_enabled, tpl_id))
+            await self._conn.execute("BEGIN IMMEDIATE")
+            async with self._conn.execute("SELECT name, enabled FROM story_templates WHERE id=?", (tpl_id,)) as cur:
+                row = await cur.fetchone()
+            if not row:
+                await self._conn.rollback()
+                return None
+            new_enabled = 1 - int(row["enabled"])
+            await self._conn.execute("UPDATE story_templates SET enabled=? WHERE id=?", (new_enabled, tpl_id))
+            await self._conn.commit()
             return (row["name"], bool(new_enabled))
         except Exception as e:
+            await self._conn.rollback()
             logger.error(f"[SadStory] toggle_template(id={tpl_id}) 失败: {e}")
             raise
 

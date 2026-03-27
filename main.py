@@ -493,14 +493,18 @@ class SadStoryPlugin(Star):
 
 
     async def _resolve_user_info(self, bot, group_id: int, user_id: str) -> dict:
-        """根据 user_id 获取昵称信息"""
         try:
-            info = await bot.get_group_member_info(group_id=group_id, user_id=int(user_id))
+            info = await asyncio.wait_for(
+                bot.get_group_member_info(group_id=group_id, user_id=int(user_id)),
+                timeout=10.0
+            )
             if info:
                 nickname = info.get("card", "") or info.get("nickname", "") or f"用户{user_id[-4:]}"
                 return {"nickname": nickname, "user_id": user_id}
-        except Exception:
-            pass
+        except asyncio.TimeoutError:
+            logger.warning(f"[SadStory] get_group_member_info 超时: user_id={user_id}")
+        except Exception as e:
+            logger.warning(f"[SadStory] get_group_member_info 失败: {e}")
         return {"nickname": f"用户{user_id[-4:]}", "user_id": user_id}
 
     async def _generate_story(self, event: AiocqhttpMessageEvent, theme: str = "", forced_protagonists: list[dict] | None = None) -> list:
@@ -603,9 +607,12 @@ class SadStoryPlugin(Star):
                 provider_id = await self.context.get_current_chat_provider_id(
                     event.unified_msg_origin
                 )
-            llm_resp = await self.context.llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
+            llm_resp = await asyncio.wait_for(
+                self.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                ),
+                timeout=120.0
             )
             raw = llm_resp.completion_text.strip()
             # 去除 LLM 输出中混入的 bot 日志（时间戳格式：[2026-03-27 09:14:20.159] [Plug] ...）
@@ -623,12 +630,12 @@ class SadStoryPlugin(Star):
                 try:
                     candidate = raw[start:start + end_offset]
                     story_data = json.loads(candidate)
-                    if isinstance(story_data, list) and len(story_data) >= 2:
+                    if isinstance(story_data, list) and len(story_data) >= self.story_min_messages:
                         break
                 except json.JSONDecodeError:
                     pass
-            if story_data is None or not isinstance(story_data, list) or len(story_data) < 2:
-                logger.error(f"[SadStory] JSON 数组提取失败或不足2条, raw[:100]: {raw[:100]}")
+            if story_data is None or not isinstance(story_data, list) or len(story_data) < self.story_min_messages:
+                logger.error(f"[SadStory] JSON 数组提取失败或不足{self.story_min_messages}条, raw[:100]: {raw[:100]}")
                 return []
 
             # 构建角色映射（使用昵称+user_id双key，避免重名冲突）
@@ -683,10 +690,13 @@ class SadStoryPlugin(Star):
             return messages
 
         except json.JSONDecodeError as e:
-            logger.error(f"[SadStory] JSON 解析失败: {e}")
+            logger.error(f"[SadStory] JSON 解析失败: {e}, raw[:200]={raw[:200] if raw else 'N/A'}")
+            return []
+        except asyncio.TimeoutError:
+            logger.error(f"[SadStory] LLM 生成超时 (120s)")
             return []
         except Exception as e:
-            logger.error(f"[SadStory] 生成故事失败: {e}")
+            logger.error(f"[SadStory] 生成故事失败: {type(e).__name__}: {e}")
             return []
 
 
@@ -814,7 +824,14 @@ class SadStoryPlugin(Star):
                     user["nickname"] = member_map[user["user_id"]]["nickname"]
                 if not user["nickname"]:
                     user["nickname"] = f"用户{user['user_id'][-4:]}"
-            self.user_pool = pool
+            # 去重：按 user_id 去重，保留第一次出现的用户
+            seen_ids = set()
+            unique_pool = []
+            for u in pool:
+                if u["user_id"] not in seen_ids:
+                    unique_pool.append(u)
+                    seen_ids.add(u["user_id"])
+            self.user_pool = unique_pool
 
         logger.info(f"[SadStory] 当前用户池大小: {len(self.user_pool)}, 虚拟模式: {self.use_virtual_users}")
 
