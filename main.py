@@ -523,7 +523,7 @@ class SadStoryPlugin(Star):
 
         dual_mode = forced_protagonists is not None and len(forced_protagonists) == 2
 
-        logger.info(f"[SadStory] dual_mode={dual_mode}, forced_protagonists={forced_protagonists}, available_users={[(u['nickname'], u['user_id']) for u in users]}")
+        logger.info(f"[SadStory] dual_mode={dual_mode}, forced_protagonists={forced_protagonists}, available_users_count={len(users)}")
 
         # 双主角模式
         if dual_mode:
