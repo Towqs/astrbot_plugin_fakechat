@@ -19,7 +19,7 @@
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/Towqs/astrbot_plugin_sadstory.git
+git clone https://github.com/Towqs/astrbot_plugin_fakechat.git
 ```
 
 ## 🚀 使用方法
