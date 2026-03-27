@@ -464,22 +464,19 @@ class SadStoryPlugin(Star):
     # ==================== 故事生成 ====================
 
     def _get_at_user_ids(self, event: AiocqhttpMessageEvent) -> list[str]:
-        """从消息中获取被 @ 的用户 ID 列表（最多2个）"""
         ids = []
         all_segs = event.get_messages()
-        logger.debug(f"[SadStory] 消息段列表: {[(type(s).__name__, getattr(s, 'qq', None)) for s in all_segs]}")
+        logger.info(f"[SadStory] 消息段: {[(type(s).__name__, getattr(s, 'qq', None), getattr(s, 'sender_id', None), getattr(s, 'text', None)[:50] if hasattr(s, 'text') and getattr(s, 'text') else None) for s in all_segs]}")
         for seg in all_segs:
             if isinstance(seg, At) and str(seg.qq) != event.get_self_id():
                 ids.append(str(seg.qq))
                 if len(ids) >= 2:
                     break
-        # 没有 @ 时，回退到引用消息
         if not ids:
             for seg in all_segs:
                 if isinstance(seg, Reply) and seg.sender_id:
                     ids.append(str(seg.sender_id))
                     break
-        logger.info(f"[SadStory] 消息段: {[(type(s).__name__, getattr(s, 'qq', None), getattr(s, 'sender_id', None)) for s in all_segs]}")
         logger.debug(f"[SadStory] 解析到的 at_ids: {ids}")
         return ids
 
