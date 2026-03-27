@@ -24,12 +24,27 @@ git clone https://github.com/Towqs/astrbot_plugin_fakechat.git
 
 ## 🚀 使用方法
 
+### 基础命令
+
 | 命令 | 说明 | 权限 |
 |------|------|------|
 | `/sadstory` | 随机生成一段伪装聊天 | 管理员 |
 | `/sadstory 主题` | 指定主题生成（如 `/sadstory 校园暗恋`） | 管理员 |
-| `/sadstory @某人` | 指定某人作为主讲人 | 管理员 |
 | `/sadstory_reload` | 重新加载素材群用户列表 | 管理员 |
+
+### 双主角模式
+
+| 命令 | 说明 |
+|------|------|
+| `/sadstory @A @B` | 两人作为主角互动对话，围观网友穿插评论 |
+| `/sadstory @A @B 主题` | 指定主题的双主角对话（如 `/sadstory @小明 @小红 甜蜜日常`） |
+
+> 💡 **提示**：双主角模式下，LLM 会生成两人之间的互动对话场景，而不是单人独白。
+
+### 风格与模板管理
+
+| 命令 | 说明 | 权限 |
+|------|------|------|
 | `/sadstory_style` | 查看当前生成参数和 Prompt 风格列表 | 管理员 |
 | `/sadstory_addstyle` | 添加新的 Prompt 风格（换行后跟内容） | 管理员 |
 | `/sadstory_usestyle 序号` | 切换 Prompt 风格的启用/禁用 | 管理员 |
