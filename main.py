@@ -807,19 +807,25 @@ class SadStoryPlugin(Star):
 
             forced_protagonists = []
             at_ids = self._get_at_user_ids(event)
+            group_id = int(group_id_str)
             if at_ids:
                 for uid in at_ids:
-                    info = await self._resolve_user_info(event.bot, int(group_id_str), uid)
+                    info = await self._resolve_user_info(event.bot, group_id, uid)
                     forced_protagonists.append(info)
                 logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
                 theme = re.sub(r'@\S+', '', theme).strip()
                 if len(forced_protagonists) == 1:
+                    if group_id not in self.group_users_map:
+                        fetched = await self._fetch_group_users(event.bot, group_id)
+                        if fetched:
+                            async with self._group_users_lock:
+                                self.group_users_map[group_id] = fetched
                     at_names = self._extract_at_names_from_plain(event)
                     if at_names:
                         pool = self.custom_protagonists + self.custom_bystanders
                         if self.source_group_id:
                             pool += self.group_users_map.get(self.source_group_id, [])
-                        pool += self.group_users_map.get(int(group_id_str), [])
+                        pool += self.group_users_map.get(group_id, [])
                         existing_ids = {p['user_id'] for p in forced_protagonists}
                         for name in at_names:
                             for u in pool:
@@ -833,10 +839,15 @@ class SadStoryPlugin(Star):
             else:
                 at_names = self._extract_at_names_from_plain(event)
                 if at_names:
+                    if group_id not in self.group_users_map:
+                        fetched = await self._fetch_group_users(event.bot, group_id)
+                        if fetched:
+                            async with self._group_users_lock:
+                                self.group_users_map[group_id] = fetched
                     pool = self.custom_protagonists + self.custom_bystanders
                     if self.source_group_id:
                         pool += self.group_users_map.get(self.source_group_id, [])
-                    pool += self.group_users_map.get(int(group_id_str), [])
+                    pool += self.group_users_map.get(group_id, [])
                     for name in at_names:
                         for u in pool:
                             if name in u['nickname'] or u['nickname'] in name:
@@ -846,7 +857,6 @@ class SadStoryPlugin(Star):
                     logger.info(f"[SadStory] 从 Plain 匹配的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
                     theme = re.sub(r'@\S+', '', theme).strip()
 
-            group_id = int(group_id_str)
             if not self.use_virtual_users:
                 pool = self.custom_protagonists + self.custom_bystanders
                 if self.source_group_id:
