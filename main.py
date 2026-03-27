@@ -226,13 +226,13 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.10")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.11")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
         self.user_pool = []
-        self.group_users = []
+        self.group_users_map = {}
         self.cooldown_map = {}
         self._cooldown_lock = asyncio.Lock()
         self._import_lock = asyncio.Lock()
@@ -305,7 +305,7 @@ class SadStoryPlugin(Star):
 
         logger.info(f"[SadStory] 配置加载: 主讲人={len(self.custom_protagonists)}, 网友={len(self.custom_bystanders)}, 素材群={self.source_group_id}")
         # 合并用户池
-        self.user_pool = self.custom_protagonists + self.custom_bystanders + self.group_users
+        self.user_pool = self.custom_protagonists + self.custom_bystanders
 
     async def _import_webui_data(self):
         """从 WebUI 的 template_list 配置导入写作风格和故事模板到数据库，导入后清空"""
@@ -396,19 +396,6 @@ class SadStoryPlugin(Star):
         except Exception as e:
             logger.error(f"[SadStory] 获取群成员列表失败: {e}")
             return []
-
-    def _resolve_qq_lists(self, all_members: list):
-        """根据群成员列表补充自定义角色的昵称（如果未手动填写）"""
-        member_map = {u["user_id"]: u for u in all_members}
-
-        for user in self.custom_protagonists + self.custom_bystanders:
-            if not user["nickname"] and user["user_id"] in member_map:
-                user["nickname"] = member_map[user["user_id"]]["nickname"]
-            if not user["nickname"]:
-                user["nickname"] = f"用户{user['user_id'][-4:]}"
-
-        # 重新合并用户池
-        self.user_pool = self.custom_protagonists + self.custom_bystanders + self.group_users
 
     def _get_available_users(self) -> list:
         if self.user_pool:
@@ -773,24 +760,28 @@ class SadStoryPlugin(Star):
             theme = ' '.join(part for part in theme.split(' @') if part.strip())
 
         # 虚拟模式下跳过素材群拉取
+        group_id = int(group_id_str)
         if not self.use_virtual_users:
-            # 如果素材群有配置且用户池为空，尝试拉取
-            if self.source_group_id and not self.group_users:
+            pool = self.custom_protagonists + self.custom_bystanders
+            if self.source_group_id:
+                pool += self.group_users_map.get(self.source_group_id, [])
+            if len(pool) < 2 and group_id != self.source_group_id:
+                pool += self.group_users_map.get(group_id, [])
+            if len(pool) < 2:
                 async with self._group_users_lock:
-                    if not self.group_users:  # 双重检查
-                        fetched = await self._fetch_group_users(event.bot, self.source_group_id)
+                    if group_id not in self.group_users_map:
+                        fetched = await self._fetch_group_users(event.bot, group_id)
                         if fetched:
-                            self.group_users = fetched
-                            self._resolve_qq_lists(fetched)
-
-            # 如果用户池仍为空，从当前群拉取真实成员
-            if not self.user_pool:
-                async with self._group_users_lock:
-                    if not self.user_pool:  # 双重检查
-                        fetched = await self._fetch_group_users(event.bot, int(group_id_str))
-                        if fetched:
-                            self.group_users = fetched
-                            self._resolve_qq_lists(fetched)
+                            self.group_users_map[group_id] = fetched
+                pool += self.group_users_map.get(group_id, [])
+            # 补充自定义角色的昵称（如果未填写）
+            member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
+            for user in self.custom_protagonists + self.custom_bystanders:
+                if not user["nickname"] and user["user_id"] in member_map:
+                    user["nickname"] = member_map[user["user_id"]]["nickname"]
+                if not user["nickname"]:
+                    user["nickname"] = f"用户{user['user_id'][-4:]}"
+            self.user_pool = pool
 
         logger.info(f"[SadStory] 当前用户池大小: {len(self.user_pool)}, 虚拟模式: {self.use_virtual_users}")
 
@@ -826,9 +817,8 @@ class SadStoryPlugin(Star):
         async with self._group_users_lock:
             fetched = await self._fetch_group_users(event.bot, self.source_group_id)
             if fetched:
-                self.group_users = fetched
-                self._resolve_qq_lists(fetched)
-                yield event.plain_result(f"用户池已刷新，当前共 {len(self.user_pool)} 个用户")
+                self.group_users_map[self.source_group_id] = fetched
+                yield event.plain_result(f"素材群用户已刷新，当前 {len(fetched)} 人")
             else:
                 yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
 
