@@ -806,101 +806,97 @@ class SadStoryPlugin(Star):
             yield event.plain_result(f"太快了，休息一下吧~ ({self.cooldown_seconds}秒冷却)")
             return
 
-        # 不再预占冷却，等成功后再设置
+        success = False
+        try:
+            theme = event.message_str.partition(" ")[2].strip()
+            if len(theme) > 100:
+                theme = theme[:100]
 
-        theme = event.message_str.partition(" ")[2].strip()
-        if len(theme) > 100:
-            theme = theme[:100]
+            forced_protagonists = []
+            at_ids = self._get_at_user_ids(event)
+            if at_ids:
+                for uid in at_ids:
+                    info = await self._resolve_user_info(event.bot, int(group_id_str), uid)
+                    forced_protagonists.append(info)
+                logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
+                theme = re.sub(r'@\S+', '', theme).strip()
+            else:
+                at_names = self._extract_at_names_from_plain(event)
+                if at_names:
+                    pool = self.custom_protagonists + self.custom_bystanders
+                    if self.source_group_id:
+                        pool += self.group_users_map.get(self.source_group_id, [])
+                    pool += self.group_users_map.get(int(group_id_str), [])
+                    for name in at_names:
+                        for u in pool:
+                            if name in u['nickname'] or u['nickname'] in name:
+                                if u not in forced_protagonists:
+                                    forced_protagonists.append(u)
+                                break
+                    logger.info(f"[SadStory] 从 Plain 匹配的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
+                    theme = re.sub(r'@\S+', '', theme).strip()
 
-        # 检查是否 @ 或引用了某人作为主角
-        forced_protagonists = []
-        at_ids = self._get_at_user_ids(event)
-        if at_ids:
-            for uid in at_ids:
-                info = await self._resolve_user_info(event.bot, int(group_id_str), uid)
-                forced_protagonists.append(info)
-            logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
-            theme = re.sub(r'@\S+', '', theme).strip()
-        else:
-            at_names = self._extract_at_names_from_plain(event)
-            if at_names:
+            group_id = int(group_id_str)
+            if not self.use_virtual_users:
                 pool = self.custom_protagonists + self.custom_bystanders
                 if self.source_group_id:
                     pool += self.group_users_map.get(self.source_group_id, [])
-                pool += self.group_users_map.get(int(group_id_str), [])
-                for name in at_names:
-                    for u in pool:
-                        if name in u['nickname'] or u['nickname'] in name:
-                            if u not in forced_protagonists:
-                                forced_protagonists.append(u)
-                            break
-                logger.info(f"[SadStory] 从 Plain 匹配的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
-                theme = re.sub(r'@\S+', '', theme).strip()
+                if len(pool) < 2 and group_id != self.source_group_id:
+                    pool += self.group_users_map.get(group_id, [])
+                if len(pool) < 2:
+                    need_fetch = False
+                    async with self._group_users_lock:
+                        if group_id not in self.group_users_map:
+                            need_fetch = True
+                    if need_fetch:
+                        fetched = await self._fetch_group_users(event.bot, group_id)
+                        if fetched:
+                            async with self._group_users_lock:
+                                self.group_users_map[group_id] = fetched
+                    pool += self.group_users_map.get(group_id, [])
+                if forced_protagonists:
+                    existing_ids = {u["user_id"] for u in pool}
+                    for fp in forced_protagonists:
+                        if fp["user_id"] not in existing_ids:
+                            pool.append(fp)
+                            existing_ids.add(fp["user_id"])
+                member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
+                for user in self.custom_protagonists + self.custom_bystanders:
+                    if not user["nickname"] and user["user_id"] in member_map:
+                        user["nickname"] = member_map[user["user_id"]]["nickname"]
+                    if not user["nickname"]:
+                        user["nickname"] = f"用户{user['user_id'][-4:]}"
+                seen_ids = set()
+                unique_pool = []
+                for u in pool:
+                    if u["user_id"] not in seen_ids:
+                        unique_pool.append(u)
+                        seen_ids.add(u["user_id"])
+                final_user_pool = unique_pool
+            else:
+                final_user_pool = None
 
-        # 虚拟模式下跳过素材群拉取
-        group_id = int(group_id_str)
-        if not self.use_virtual_users:
-            pool = self.custom_protagonists + self.custom_bystanders
-            if self.source_group_id:
-                pool += self.group_users_map.get(self.source_group_id, [])
-            if len(pool) < 2 and group_id != self.source_group_id:
-                pool += self.group_users_map.get(group_id, [])
-            if len(pool) < 2:
-                need_fetch = False
-                async with self._group_users_lock:
-                    if group_id not in self.group_users_map:
-                        need_fetch = True
-                if need_fetch:
-                    fetched = await self._fetch_group_users(event.bot, group_id)
-                    if fetched:
-                        async with self._group_users_lock:
-                            self.group_users_map[group_id] = fetched
-                pool += self.group_users_map.get(group_id, [])
-            # @指定的主角强制加入用户池（若不在池中）
-            if forced_protagonists:
-                existing_ids = {u["user_id"] for u in pool}
-                for fp in forced_protagonists:
-                    if fp["user_id"] not in existing_ids:
-                        pool.append(fp)
-                        existing_ids.add(fp["user_id"])
-            # 补充自定义角色的昵称（如果未填写）
-            member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
-            for user in self.custom_protagonists + self.custom_bystanders:
-                if not user["nickname"] and user["user_id"] in member_map:
-                    user["nickname"] = member_map[user["user_id"]]["nickname"]
-                if not user["nickname"]:
-                    user["nickname"] = f"用户{user['user_id'][-4:]}"
-            # 去重：按 user_id 去重，保留第一次出现的用户
-            seen_ids = set()
-            unique_pool = []
-            for u in pool:
-                if u["user_id"] not in seen_ids:
-                    unique_pool.append(u)
-                    seen_ids.add(u["user_id"])
-            final_user_pool = unique_pool
-        else:
-            final_user_pool = None
+            logger.info(f"[SadStory] 当前用户池大小: {len(final_user_pool) if final_user_pool else 0}, 虚拟模式: {self.use_virtual_users}")
 
-        logger.info(f"[SadStory] 当前用户池大小: {len(final_user_pool) if final_user_pool else 0}, 虚拟模式: {self.use_virtual_users}")
+            yield event.plain_result("正在生成伪装聊天，请稍候...")
 
-        yield event.plain_result("正在生成伪装聊天，请稍候...")
+            messages = await self._generate_story(event, theme, forced_protagonists or None, final_user_pool)
+            if not messages:
+                yield event.plain_result("生成失败了，可能是用户池不足（至少需要2人）或 LLM 服务暂时不可用，请稍后再试~")
+                return
 
-        messages = await self._generate_story(event, theme, forced_protagonists or None, final_user_pool)
-        if not messages:
-            await self._clear_cooldown(group_id_str)
-            yield event.plain_result("生成失败了，可能是用户池不足（至少需要2人）或 LLM 服务暂时不可用，请稍后再试~")
-            return
-
-        nodes = self._build_forward_nodes(messages)
-        try:
+            nodes = self._build_forward_nodes(messages)
             await event.bot.send_group_forward_msg(
                 group_id=int(group_id_str),
                 messages=nodes,
             )
+            success = True
         except Exception as e:
-            logger.error(f"[SadStory] 发送合并转发失败: {e}")
-            await self._clear_cooldown(group_id_str)
-            yield event.plain_result(f"发送失败了: {e}")
+            logger.error(f"[SadStory] sadstory 执行异常: {e}")
+            yield event.plain_result(f"执行失败: {e}")
+        finally:
+            if not success:
+                await self._clear_cooldown(group_id_str)
 
     @filter.command("sadstory_reload")
     async def reload_users(self, event: AiocqhttpMessageEvent):
@@ -912,13 +908,13 @@ class SadStoryPlugin(Star):
             yield event.plain_result("未配置素材群，请先在 WebUI 插件配置中设置素材群群号")
             return
 
-        async with self._group_users_lock:
-            fetched = await self._fetch_group_users(event.bot, self.source_group_id)
-            if fetched:
+        fetched = await self._fetch_group_users(event.bot, self.source_group_id)
+        if fetched:
+            async with self._group_users_lock:
                 self.group_users_map[self.source_group_id] = fetched
-                yield event.plain_result(f"素材群用户已刷新，当前 {len(fetched)} 人")
-            else:
-                yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
+            yield event.plain_result(f"素材群用户已刷新，当前 {len(fetched)} 人")
+        else:
+            yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
 
     @filter.command("sadstory_addtpl")
     async def add_template(self, event: AiocqhttpMessageEvent):
