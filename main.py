@@ -538,6 +538,8 @@ class SadStoryPlugin(Star):
         # 单主角模式（配置指定）
         elif self.custom_protagonists:
             protagonist = random.choice(self.custom_protagonists)
+            if not protagonist.get("nickname"):
+                protagonist["nickname"] = f"用户{protagonist['user_id'][-4:]}"
             other_users = [u for u in users if u["user_id"] != protagonist["user_id"]]
             bystander_count = max(1, min(self.bystander_count, len(other_users)))
         # 单主角模式（随机）
@@ -634,15 +636,30 @@ class SadStoryPlugin(Star):
             
             bracket_stack = []
             end = -1
+            in_string = False
+            escape_next = False
+            
             for i in range(start, len(raw)):
-                if raw[i] == '[':
+                char = raw[i]
+                if escape_next:
+                    escape_next = False
+                    continue
+                if char == '\\':
+                    escape_next = True
+                    continue
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if char == '[':
                     bracket_stack.append('[')
-                elif raw[i] == '{':
+                elif char == '{':
                     bracket_stack.append('{')
-                elif raw[i] == '}':
+                elif char == '}':
                     if bracket_stack and bracket_stack[-1] == '{':
                         bracket_stack.pop()
-                elif raw[i] == ']':
+                elif char == ']':
                     if bracket_stack and bracket_stack[-1] == '[':
                         bracket_stack.pop()
                         if not bracket_stack:
@@ -829,10 +846,14 @@ class SadStoryPlugin(Star):
             if len(pool) < 2 and group_id != self.source_group_id:
                 pool += self.group_users_map.get(group_id, [])
             if len(pool) < 2:
+                need_fetch = False
                 async with self._group_users_lock:
                     if group_id not in self.group_users_map:
-                        fetched = await self._fetch_group_users(event.bot, group_id)
-                        if fetched:
+                        need_fetch = True
+                if need_fetch:
+                    fetched = await self._fetch_group_users(event.bot, group_id)
+                    if fetched:
+                        async with self._group_users_lock:
                             self.group_users_map[group_id] = fetched
                 pool += self.group_users_map.get(group_id, [])
             # @指定的主角强制加入用户池（若不在池中）

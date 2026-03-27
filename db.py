@@ -42,9 +42,10 @@ class SadStoryDB:
             raise
 
     async def close(self):
-        if self._conn:
-            await self._conn.close()
-            self._conn = None
+        async with self._tx_lock:
+            if self._conn:
+                await self._conn.close()
+                self._conn = None
 
     def _ensure_conn(self):
         if self._conn is None:
@@ -72,15 +73,16 @@ class SadStoryDB:
 
     async def add_style(self, name: str, content: str, enabled: bool = True) -> int | None:
         self._ensure_conn()
-        try:
-            cur = await self._conn.execute(
-                "INSERT INTO writing_styles (name, enabled, content) VALUES (?, ?, ?)",
-                (name, int(enabled), content)
-            )
-            await self._conn.commit()
-            return cur.lastrowid
-        except aiosqlite.IntegrityError:
-            return None
+        async with self._tx_lock:
+            try:
+                cur = await self._conn.execute(
+                    "INSERT INTO writing_styles (name, enabled, content) VALUES (?, ?, ?)",
+                    (name, int(enabled), content)
+                )
+                await self._conn.commit()
+                return cur.lastrowid
+            except aiosqlite.IntegrityError:
+                return None
 
     async def toggle_style(self, style_id: int) -> tuple[str, bool] | None:
         self._ensure_conn()
@@ -103,17 +105,18 @@ class SadStoryDB:
 
     async def delete_style(self, style_id: int) -> str | None:
         self._ensure_conn()
-        try:
-            async with self._conn.execute("SELECT name FROM writing_styles WHERE id=?", (style_id,)) as cur:
-                row = await cur.fetchone()
-            if not row:
-                return None
-            await self._conn.execute("DELETE FROM writing_styles WHERE id=?", (style_id,))
-            await self._conn.commit()
-            return row["name"]
-        except Exception as e:
-            logger.error(f"[SadStory] delete_style(id={style_id}) 失败: {e}")
-            raise
+        async with self._tx_lock:
+            try:
+                async with self._conn.execute("SELECT name FROM writing_styles WHERE id=?", (style_id,)) as cur:
+                    row = await cur.fetchone()
+                if not row:
+                    return None
+                await self._conn.execute("DELETE FROM writing_styles WHERE id=?", (style_id,))
+                await self._conn.commit()
+                return row["name"]
+            except Exception as e:
+                logger.error(f"[SadStory] delete_style(id={style_id}) 失败: {e}")
+                raise
 
     # ========== 故事模板 ==========
 
@@ -137,15 +140,16 @@ class SadStoryDB:
 
     async def add_template(self, name: str, content: str, enabled: bool = True) -> int | None:
         self._ensure_conn()
-        try:
-            cur = await self._conn.execute(
-                "INSERT INTO story_templates (name, enabled, content) VALUES (?, ?, ?)",
-                (name, int(enabled), content)
-            )
-            await self._conn.commit()
-            return cur.lastrowid
-        except aiosqlite.IntegrityError:
-            return None
+        async with self._tx_lock:
+            try:
+                cur = await self._conn.execute(
+                    "INSERT INTO story_templates (name, enabled, content) VALUES (?, ?, ?)",
+                    (name, int(enabled), content)
+                )
+                await self._conn.commit()
+                return cur.lastrowid
+            except aiosqlite.IntegrityError:
+                return None
 
     async def toggle_template(self, tpl_id: int) -> tuple[str, bool] | None:
         self._ensure_conn()
@@ -168,14 +172,15 @@ class SadStoryDB:
 
     async def delete_template(self, tpl_id: int) -> str | None:
         self._ensure_conn()
-        try:
-            async with self._conn.execute("SELECT name FROM story_templates WHERE id=?", (tpl_id,)) as cur:
-                row = await cur.fetchone()
-            if not row:
-                return None
-            await self._conn.execute("DELETE FROM story_templates WHERE id=?", (tpl_id,))
-            await self._conn.commit()
-            return row["name"]
-        except Exception as e:
-            logger.error(f"[SadStory] delete_template(id={tpl_id}) 失败: {e}")
-            raise
+        async with self._tx_lock:
+            try:
+                async with self._conn.execute("SELECT name FROM story_templates WHERE id=?", (tpl_id,)) as cur:
+                    row = await cur.fetchone()
+                if not row:
+                    return None
+                await self._conn.execute("DELETE FROM story_templates WHERE id=?", (tpl_id,))
+                await self._conn.commit()
+                return row["name"]
+            except Exception as e:
+                logger.error(f"[SadStory] delete_template(id={tpl_id}) 失败: {e}")
+                raise
