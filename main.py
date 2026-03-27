@@ -226,7 +226,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.9")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.6.10")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -610,6 +610,9 @@ class SadStoryPlugin(Star):
                 prompt=prompt,
             )
             raw = llm_resp.completion_text.strip()
+            # 去除 LLM 输出中混入的 bot 日志（时间戳格式：[2026-03-27 09:14:20.159] [Plug] ...）
+            raw = re.sub(r'\[[\d]{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\].*', '', raw)
+            raw = raw.strip()
 
             # 使用渐进式解析提取 JSON 数组，找到第一个 [ 后逐步扩展直到成功解析为 list
             start = raw.find("[")
@@ -622,12 +625,12 @@ class SadStoryPlugin(Star):
                 try:
                     candidate = raw[start:start + end_offset]
                     story_data = json.loads(candidate)
-                    if isinstance(story_data, list):
+                    if isinstance(story_data, list) and len(story_data) >= 2:
                         break
                 except json.JSONDecodeError:
                     pass
-            if story_data is None or not isinstance(story_data, list):
-                logger.error(f"[SadStory] JSON 数组提取失败或格式错误, raw[:100]: {raw[:100]}")
+            if story_data is None or not isinstance(story_data, list) or len(story_data) < 2:
+                logger.error(f"[SadStory] JSON 数组提取失败或不足2条, raw[:100]: {raw[:100]}")
                 return []
 
             # 构建角色映射（使用昵称+user_id双key，避免重名冲突）
