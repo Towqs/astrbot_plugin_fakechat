@@ -680,21 +680,22 @@ class SadStoryPlugin(Star):
                 logger.error(f"[SadStory] JSON 数组提取失败或不足{self.story_min_messages}条")
                 return []
 
-            # 构建角色映射（使用昵称+user_id双key，避免重名冲突）
-            role_map = {}
+            # 构建角色映射（优先使用 user_id，昵称仅作模糊匹配候选）
+            id_to_user = {}
+            nickname_candidates = []
             if dual_mode:
-                role_map[protagonist_a["nickname"]] = protagonist_a
-                role_map[protagonist_a["user_id"]] = protagonist_a
-                role_map[protagonist_b["nickname"]] = protagonist_b
-                role_map[protagonist_b["user_id"]] = protagonist_b
+                id_to_user[protagonist_a["user_id"]] = protagonist_a
+                id_to_user[protagonist_b["user_id"]] = protagonist_b
+                nickname_candidates.append((protagonist_a["nickname"], protagonist_a))
+                nickname_candidates.append((protagonist_b["nickname"], protagonist_b))
                 fallback_user = protagonist_a
             else:
-                role_map[protagonist["nickname"]] = protagonist
-                role_map[protagonist["user_id"]] = protagonist
+                id_to_user[protagonist["user_id"]] = protagonist
+                nickname_candidates.append((protagonist["nickname"], protagonist))
                 fallback_user = protagonist
             for b in bystanders:
-                role_map[b["nickname"]] = b
-                role_map[b["user_id"]] = b
+                id_to_user[b["user_id"]] = b
+                nickname_candidates.append((b["nickname"], b))
 
             # 消息条数约束
             max_msgs = self.story_max_messages
@@ -708,20 +709,12 @@ class SadStoryPlugin(Star):
                 content = item.get("content", "")
                 if not speaker or not content:
                     continue
-                user_info = role_map.get(speaker)
+                user_info = id_to_user.get(speaker)
                 if not user_info:
-                    # 昵称匹配失败时用模糊匹配（长度接近且一方包含另一方）
-                    best_match = None
-                    best_score = 0
-                    for nick, info in role_map.items():
-                        if nick != speaker and isinstance(nick, str) and isinstance(speaker, str):
-                            if speaker in nick or nick in speaker:
-                                score = min(len(speaker), len(nick))
-                                if score > best_score:
-                                    best_score = score
-                                    best_match = info
-                    if best_match:
-                        user_info = best_match
+                    for nick, info in nickname_candidates:
+                        if speaker == nick or (isinstance(speaker, str) and isinstance(nick, str) and (speaker in nick or nick in speaker)):
+                            user_info = info
+                            break
                 if not user_info:
                     user_info = fallback_user
                 messages.append({
@@ -861,11 +854,16 @@ class SadStoryPlugin(Star):
                             pool.append(fp)
                             existing_ids.add(fp["user_id"])
                 member_map = {u["user_id"]: u for u in self.group_users_map.get(group_id, [])}
+                custom_pool = []
+                custom_ids = {u["user_id"] for u in self.custom_protagonists + self.custom_bystanders}
                 for user in self.custom_protagonists + self.custom_bystanders:
-                    if not user["nickname"] and user["user_id"] in member_map:
-                        user["nickname"] = member_map[user["user_id"]]["nickname"]
-                    if not user["nickname"]:
-                        user["nickname"] = f"用户{user['user_id'][-4:]}"
+                    user_copy = {"user_id": user["user_id"], "nickname": user.get("nickname", "")}
+                    if not user_copy["nickname"] and user_copy["user_id"] in member_map:
+                        user_copy["nickname"] = member_map[user_copy["user_id"]]["nickname"]
+                    if not user_copy["nickname"]:
+                        user_copy["nickname"] = f"用户{user_copy['user_id'][-4:]}"
+                    custom_pool.append(user_copy)
+                pool = custom_pool + [u for u in pool if u["user_id"] not in custom_ids]
                 seen_ids = set()
                 unique_pool = []
                 for u in pool:
