@@ -87,14 +87,7 @@ class NestChatGenerator:
             "data": {
                 "user_id": str(outer_user["user_id"]),
                 "nickname": outer_user["nickname"],
-                "content": [{
-                    "type": "forward",
-                    "data": {
-                        "content": {
-                            "message": inner_nodes
-                        }
-                    }
-                }]
+                "content": inner_nodes,
             },
             "is_nest": True
         }

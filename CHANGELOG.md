@@ -1,5 +1,8 @@
 # 更新日志
 
+## v0.7.5
+- 修复 NapCat 嵌套转发格式：node.content 直接嵌套 node 数组（Array 套娃），符合 OneBot 11 规范
+
 ## v0.7.4
 - 修复 NapCat 嵌套转发格式：使用 content.message 替代 nodes
 
