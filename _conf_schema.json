@@ -12,6 +12,13 @@
     "slider": { "min": 0, "max": 300, "step": 10 },
     "default": 60
   },
+  "daily_usage_limit": {
+    "description": "每日使用次数限制",
+    "type": "int",
+    "hint": "普通用户每天最多使用次数，管理员无限制。设为 0 则无限制。",
+    "slider": { "min": 0, "max": 20, "step": 1 },
+    "default": 3
+  },
   "story_min_messages": {
     "description": "最少消息条数",
     "type": "int",
