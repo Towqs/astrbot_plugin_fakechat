@@ -1,6 +1,7 @@
 import asyncio
 import aiosqlite
 from pathlib import Path
+from datetime import date
 from astrbot.api import logger
 
 
@@ -37,6 +38,14 @@ class SadStoryDB:
                         name TEXT NOT NULL UNIQUE,
                         enabled INTEGER NOT NULL DEFAULT 1,
                         content TEXT NOT NULL
+                    )
+                """)
+                await self._conn.execute("""
+                    CREATE TABLE IF NOT EXISTS user_daily_usage (
+                        user_id TEXT NOT NULL,
+                        usage_date TEXT NOT NULL,
+                        count INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (user_id, usage_date)
                     )
                 """)
                 await self._conn.commit()
@@ -197,4 +206,38 @@ class SadStoryDB:
             except Exception as e:
                 await self._safe_rollback()
                 logger.error(f"[SadStory] delete_template(id={tpl_id}) 失败: {e}")
+                raise
+
+    async def get_user_daily_usage(self, user_id: str) -> int:
+        today = date.today().isoformat()
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            async with self._conn.execute(
+                "SELECT count FROM user_daily_usage WHERE user_id=? AND usage_date=?",
+                (user_id, today)
+            ) as cur:
+                row = await cur.fetchone()
+                return row["count"] if row else 0
+
+    async def increment_user_daily_usage(self, user_id: str) -> int:
+        today = date.today().isoformat()
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            try:
+                await self._conn.execute("""
+                    INSERT INTO user_daily_usage (user_id, usage_date, count) VALUES (?, ?, 1)
+                    ON CONFLICT(user_id, usage_date) DO UPDATE SET count = count + 1
+                """, (user_id, today))
+                await self._conn.commit()
+                async with self._conn.execute(
+                    "SELECT count FROM user_daily_usage WHERE user_id=? AND usage_date=?",
+                    (user_id, today)
+                ) as cur:
+                    row = await cur.fetchone()
+                    return row["count"] if row else 0
+            except Exception as e:
+                await self._safe_rollback()
+                logger.error(f"[SadStory] increment_user_daily_usage 失败: {e}")
                 raise

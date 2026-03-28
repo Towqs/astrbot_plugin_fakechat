@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from astrbot.api.event import filter
+from astrbot.api.event.filter import PermissionType
 from astrbot.api.star import Context, Star, register, StarTools
 from astrbot.api import logger
 from astrbot.core.message.components import At, Reply
@@ -287,7 +288,8 @@ class SadStoryPlugin(Star):
         if self.inner_msg_min > self.inner_msg_max:
             self.inner_msg_min, self.inner_msg_max = self.inner_msg_max, self.inner_msg_min
 
-        # 解析允许使用的QQ号列表
+        self.daily_usage_limit = self._clamp(self._parse_int(cfg.get("daily_usage_limit", ""), 3), 0, 100)
+
         raw_allowed = cfg.get("allowed_user_list", [])
         self.allowed_users = set()
         if isinstance(raw_allowed, list):
@@ -296,7 +298,6 @@ class SadStoryPlugin(Star):
                 if qq:
                     self.allowed_users.add(qq)
 
-        # 解析主讲人QQ号列表
         raw_protagonists = cfg.get("protagonist_qq_list", [])
         self.custom_protagonists = []
         if isinstance(raw_protagonists, list):
@@ -483,6 +484,31 @@ class SadStoryPlugin(Star):
             return True
         sender_id = str(event.get_sender_id())
         return sender_id in self.allowed_users
+
+    async def _is_admin(self, event: AiocqhttpMessageEvent) -> bool:
+        """检查用户是否为 AstrBot 配置的管理员"""
+        sender_id = str(event.get_sender_id())
+        admins = self.context.get("admins", [])
+        return sender_id in [str(a) for a in admins]
+
+    async def _check_daily_usage(self, event: AiocqhttpMessageEvent) -> tuple[bool, int, int]:
+        """检查用户每日使用次数
+        返回: (是否允许使用, 今日已用次数, 每日上限)
+        """
+        if self.daily_usage_limit <= 0:
+            return True, 0, 0
+        sender_id = str(event.get_sender_id())
+        if await self._is_admin(event):
+            return True, 0, self.daily_usage_limit
+        current_usage = await self.db.get_user_daily_usage(sender_id)
+        if current_usage >= self.daily_usage_limit:
+            return False, current_usage, self.daily_usage_limit
+        return True, current_usage, self.daily_usage_limit
+
+    async def _increment_daily_usage(self, event: AiocqhttpMessageEvent) -> int:
+        """增加用户每日使用次数，返回新的使用次数"""
+        sender_id = str(event.get_sender_id())
+        return await self.db.increment_user_daily_usage(sender_id)
 
     # ==================== Prompt 风格管理 ====================
 
@@ -833,6 +859,11 @@ class SadStoryPlugin(Star):
             yield event.plain_result("这个命令只能在群聊中使用哦~")
             return
 
+        allowed, used, limit = await self._check_daily_usage(event)
+        if not allowed:
+            yield event.plain_result(f"今日使用次数已达上限（{used}/{limit}次），请明天再来~")
+            return
+
         if not await self._check_and_set_cooldown(group_id_str):
             yield event.plain_result(f"太快了，休息一下吧~ ({self.cooldown_seconds}秒冷却)")
             return
@@ -961,6 +992,7 @@ class SadStoryPlugin(Star):
                 messages=nodes,
             )
             success = True
+            await self._increment_daily_usage(event)
         except Exception as e:
             logger.error(f"[SadStory] sadstory 执行异常: {e}")
             yield event.plain_result(f"执行失败: {e}")
@@ -986,13 +1018,11 @@ class SadStoryPlugin(Star):
         else:
             yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addtpl")
     async def add_template(self, event: AiocqhttpMessageEvent):
-        """添加故事模板。用法：/sadstory_addtpl 模板名（换行后跟模板内容）"""
-        if not self._check_permission(event):
-            return
+        """添加故事模板（管理员专用）。用法：/sadstory_addtpl 模板名（换行后跟模板内容）"""
         raw = event.message_str
-        # 去掉命令名，取第一个空格后的内容
         after_cmd = raw.partition(" ")[2]
         parts = after_cmd.split("\n", 1)
         first_line = parts[0].strip()
@@ -1059,11 +1089,10 @@ class SadStoryPlugin(Star):
         status = "已启用 ✅" if new_enabled else "已禁用 ❌"
         yield event.plain_result(f"模板「{name}」{status}")
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_deltpl")
     async def delete_template(self, event: AiocqhttpMessageEvent):
-        """删除故事模板。用法：/sadstory_deltpl ID"""
-        if not self._check_permission(event):
-            return
+        """删除故事模板（管理员专用）。用法：/sadstory_deltpl ID"""
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
             yield event.plain_result("用法：/sadstory_deltpl ID\n（ID 可通过 /sadstory_listtpl 查看方括号内的数字）")
@@ -1093,6 +1122,7 @@ class SadStoryPlugin(Star):
         lines.append(f"消息条数：{self.story_min_messages} ~ {self.story_max_messages}")
         lines.append(f"围观网友数：{self.bystander_count}")
         lines.append(f"冷却时间：{self.cooldown_seconds}秒")
+        lines.append(f"每日使用限制：{self.daily_usage_limit}次（管理员无限制）")
         lines.append(f"QQ表情：{'✅ 开启' if self.use_face_emoji else '❌ 关闭'}")
         lines.append(f"虚拟角色：{'✅ 开启' if self.use_virtual_users else '❌ 关闭'}")
         lines.append(f"群名片优先：{'✅ 是' if self.use_card_as_name else '❌ 否'}")
@@ -1148,11 +1178,10 @@ class SadStoryPlugin(Star):
             lines.append("用 /sadstory_addstyle 添加自定义风格")
         yield event.plain_result("\n".join(lines))
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addstyle")
     async def add_style(self, event: AiocqhttpMessageEvent):
-        """添加写作风格。用法：/sadstory_addstyle 风格名（换行后跟内容）"""
-        if not self._check_permission(event):
-            return
+        """添加写作风格（管理员专用）。用法：/sadstory_addstyle 风格名（换行后跟内容）"""
         raw = event.message_str
         after_cmd = raw.partition(" ")[2]
         parts = after_cmd.split("\n", 1)
@@ -1205,11 +1234,10 @@ class SadStoryPlugin(Star):
             fallback_hint = f"\n\n⚠️ 当前没有启用的风格，将使用内置{'口语化' if self.use_casual_style else '文学'}风格"
         yield event.plain_result(f"风格「{name}」{status}{fallback_hint}")
 
+    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_delstyle")
     async def delete_style(self, event: AiocqhttpMessageEvent):
-        """删除写作风格。用法：/sadstory_delstyle ID"""
-        if not self._check_permission(event):
-            return
+        """删除写作风格（管理员专用）。用法：/sadstory_delstyle ID"""
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
             yield event.plain_result("用法：/sadstory_delstyle ID\n（ID 可通过 /sadstory_style 查看）")
@@ -1378,7 +1406,8 @@ class SadStoryPlugin(Star):
   /sadstory
   /sadstory 校园暗恋
   /sadstory @小明
-  /sadstory 校园暗恋 @小明 @小红""",
+  /sadstory 校园暗恋 @小明 @小红
+说明：普通用户每日使用次数有限制，管理员无限制""",
             
             "sadstory_nest": """【/sadstory_nest】生成嵌套转发聊天
 用法：/sadstory_nest @外层发送者 @主角A [@主角B] [主题]
@@ -1388,7 +1417,8 @@ class SadStoryPlugin(Star):
 说明：
   - 外层发送者：转发消息的人
   - 主角：内层故事的主要角色
-  - 主题：可选，故事方向""",
+  - 主题：可选，故事方向
+  - 普通用户每日使用次数有限制，管理员无限制""",
             
             "sadstory_reload": """【/sadstory_reload】重新加载素材群用户
 用法：/sadstory_reload
@@ -1402,20 +1432,22 @@ class SadStoryPlugin(Star):
 用法：/sadstory_style
 说明：显示所有可用的写作风格""",
             
-            "sadstory_addstyle": """【/sadstory_addstyle】添加写作风格
+            "sadstory_addstyle": """【/sadstory_addstyle】添加写作风格 🔒管理员
 用法：/sadstory_addstyle 风格名
 （换行后跟写作指令）
 示例：
   /sadstory_addstyle 温柔风
-  语气温柔细腻，像深夜电台主播...""",
+  语气温柔细腻，像深夜电台主播...
+说明：仅管理员可用""",
             
             "sadstory_usestyle": """【/sadstory_usestyle】启用/禁用风格
 用法：/sadstory_usestyle ID
 说明：ID 可通过 /sadstory_style 查看""",
             
-            "sadstory_delstyle": """【/sadstory_delstyle】删除写作风格
+            "sadstory_delstyle": """【/sadstory_delstyle】删除写作风格 🔒管理员
 用法：/sadstory_delstyle ID
-说明：ID 可通过 /sadstory_style 查看""",
+说明：ID 可通过 /sadstory_style 查看
+仅管理员可用""",
             
             "sadstory_aistyle": """【/sadstory_aistyle】AI 生成写作风格
 用法：/sadstory_aistyle 风格描述
@@ -1425,20 +1457,22 @@ class SadStoryPlugin(Star):
 用法：/sadstory_listtpl
 说明：显示所有故事模板""",
             
-            "sadstory_addtpl": """【/sadstory_addtpl】添加故事模板
+            "sadstory_addtpl": """【/sadstory_addtpl】添加故事模板 🔒管理员
 用法：/sadstory_addtpl 模板名
 （换行后跟模板内容）
 示例：
   /sadstory_addtpl 校园故事
-  她是有点偏执的那种...""",
+  她是有点偏执的那种...
+说明：仅管理员可用""",
             
             "sadstory_usetpl": """【/sadstory_usetpl】启用/禁用模板
 用法：/sadstory_usetpl ID
 说明：ID 可通过 /sadstory_listtpl 查看""",
             
-            "sadstory_deltpl": """【/sadstory_deltpl】删除故事模板
+            "sadstory_deltpl": """【/sadstory_deltpl】删除故事模板 🔒管理员
 用法：/sadstory_deltpl ID
-说明：ID 可通过 /sadstory_listtpl 查看""",
+说明：ID 可通过 /sadstory_listtpl 查看
+仅管理员可用""",
             
             "sadstory_aitpl": """【/sadstory_aitpl】AI 生成故事模板
 用法：/sadstory_aitpl 故事描述

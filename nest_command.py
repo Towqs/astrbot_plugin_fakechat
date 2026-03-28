@@ -28,6 +28,12 @@ class NestCommandHandler:
     async def _clear_cooldown(self, group_id: str):
         await self.plugin._clear_cooldown(group_id)
 
+    async def _check_daily_usage(self, event: AiocqhttpMessageEvent):
+        return await self.plugin._check_daily_usage(event)
+
+    async def _increment_daily_usage(self, event: AiocqhttpMessageEvent):
+        return await self.plugin._increment_daily_usage(event)
+
     async def _resolve_user_info(self, bot, group_id: int, user_id: str) -> dict:
         return await self.plugin._resolve_user_info(bot, group_id, user_id)
 
@@ -44,6 +50,11 @@ class NestCommandHandler:
         group_id_str = event.get_group_id()
         if not group_id_str or group_id_str == "0":
             yield event.plain_result("这个命令只能在群聊中使用哦~")
+            return
+
+        allowed, used, limit = await self._check_daily_usage(event)
+        if not allowed:
+            yield event.plain_result(f"今日使用次数已达上限（{used}/{limit}次），请明天再来~")
             return
 
         if not await self._check_and_set_cooldown(group_id_str):
@@ -168,6 +179,7 @@ class NestCommandHandler:
                 messages=nodes,
             )
             success = True
+            await self._increment_daily_usage(event)
         except Exception as e:
             logger.error(f"[SadStory] sadstory_nest 执行异常: {e}")
             yield event.plain_result(f"执行失败: {e}")
