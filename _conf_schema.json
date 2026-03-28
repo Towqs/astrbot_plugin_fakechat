@@ -142,5 +142,33 @@
     "type": "string",
     "hint": "填写 LLM 提供商 ID（如 openai_chat_1），留空则使用默认模型。可在 WebUI「提供商管理」中查看。",
     "default": ""
+  },
+  "nest_count_min": {
+    "description": "嵌套聊天记录最少数量",
+    "type": "int",
+    "hint": "嵌套模式下，最少出现几个转发消息。",
+    "slider": { "min": 1, "max": 5, "step": 1 },
+    "default": 1
+  },
+  "nest_count_max": {
+    "description": "嵌套聊天记录最多数量",
+    "type": "int",
+    "hint": "嵌套模式下，最多出现几个转发消息。",
+    "slider": { "min": 1, "max": 5, "step": 1 },
+    "default": 3
+  },
+  "inner_msg_min": {
+    "description": "内层消息最少条数",
+    "type": "int",
+    "hint": "每个嵌套转发里最少几条消息。",
+    "slider": { "min": 2, "max": 20, "step": 1 },
+    "default": 3
+  },
+  "inner_msg_max": {
+    "description": "内层消息最多条数",
+    "type": "int",
+    "hint": "每个嵌套转发里最多几条消息。",
+    "slider": { "min": 2, "max": 20, "step": 1 },
+    "default": 8
   }
 }

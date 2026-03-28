@@ -16,6 +16,7 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 
 from astrbot.api import AstrBotConfig
 from .db import SadStoryDB
+from .nest_command import NestCommandHandler
 
 # 插件目录（用于读取故事模板）
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -245,6 +246,7 @@ class SadStoryPlugin(Star):
         self._reload_config()
         await self._import_webui_data()
         await self._import_file_templates()
+        self.nest_handler = NestCommandHandler(self)
         logger.info(f"[SadStory] 插件初始化完成，主讲人: {len(self.custom_protagonists)}个, 网友: {len(self.custom_bystanders)}个")
 
     # ==================== 配置管理 ====================
@@ -275,6 +277,15 @@ class SadStoryPlugin(Star):
         self.use_story_template = self._parse_bool(cfg.get("use_story_template", True))
         self.use_face_emoji = self._parse_bool(cfg.get("use_face_emoji", True))
         self.use_casual_style = self._parse_bool(cfg.get("use_casual_style", True))
+
+        self.nest_count_min = self._clamp(self._parse_int(cfg.get("nest_count_min", ""), 1), 1, 5)
+        self.nest_count_max = self._clamp(self._parse_int(cfg.get("nest_count_max", ""), 3), 1, 5)
+        if self.nest_count_min > self.nest_count_max:
+            self.nest_count_min, self.nest_count_max = self.nest_count_max, self.nest_count_min
+        self.inner_msg_min = self._clamp(self._parse_int(cfg.get("inner_msg_min", ""), 3), 2, 20)
+        self.inner_msg_max = self._clamp(self._parse_int(cfg.get("inner_msg_max", ""), 8), 2, 20)
+        if self.inner_msg_min > self.inner_msg_max:
+            self.inner_msg_min, self.inner_msg_max = self.inner_msg_max, self.inner_msg_min
 
         # 解析允许使用的QQ号列表
         raw_allowed = cfg.get("allowed_user_list", [])
@@ -1354,6 +1365,11 @@ class SadStoryPlugin(Star):
         except Exception as e:
             logger.error(f"[SadStory] AI 生成模板失败: {e}")
             yield event.plain_result(f"AI 生成失败: {e}")
+
+    @filter.command("sadstory_nest")
+    async def sadstory_nest(self, event: AiocqhttpMessageEvent):
+        async for result in self.nest_handler.handle_nest_command(event):
+            yield result
 
     async def terminate(self):
         await self.db.close()
