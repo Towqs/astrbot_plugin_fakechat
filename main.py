@@ -1366,6 +1366,118 @@ class SadStoryPlugin(Star):
             logger.error(f"[SadStory] AI 生成模板失败: {e}")
             yield event.plain_result(f"AI 生成失败: {e}")
 
+    @filter.command("sadstory_help")
+    async def sadstory_help(self, event: AiocqhttpMessageEvent):
+        """查看所有指令用法。用法：/sadstory_help [指令名]"""
+        message_str = event.message_str.partition(" ")[2].strip().lower()
+        
+        help_content = {
+            "sadstory": """【/sadstory】生成伪装聊天
+用法：/sadstory [主题] [@主角]
+示例：
+  /sadstory
+  /sadstory 校园暗恋
+  /sadstory @小明
+  /sadstory 校园暗恋 @小明 @小红""",
+            
+            "sadstory_nest": """【/sadstory_nest】生成嵌套转发聊天
+用法：/sadstory_nest @外层发送者 @主角A [@主角B] [主题]
+示例：
+  /sadstory_nest @咖啡 @守望者
+  /sadstory_nest @咖啡 @守望者 @小明 感人的事
+说明：
+  - 外层发送者：转发消息的人
+  - 主角：内层故事的主要角色
+  - 主题：可选，故事方向""",
+            
+            "sadstory_reload": """【/sadstory_reload】重新加载素材群用户
+用法：/sadstory_reload
+说明：从配置的素材群重新获取用户列表""",
+            
+            "sadstory_config": """【/sadstory_config】查看当前配置
+用法：/sadstory_config
+说明：显示所有插件配置信息""",
+            
+            "sadstory_style": """【/sadstory_style】查看写作风格列表
+用法：/sadstory_style
+说明：显示所有可用的写作风格""",
+            
+            "sadstory_addstyle": """【/sadstory_addstyle】添加写作风格
+用法：/sadstory_addstyle 风格名
+（换行后跟写作指令）
+示例：
+  /sadstory_addstyle 温柔风
+  语气温柔细腻，像深夜电台主播...""",
+            
+            "sadstory_usestyle": """【/sadstory_usestyle】启用/禁用风格
+用法：/sadstory_usestyle ID
+说明：ID 可通过 /sadstory_style 查看""",
+            
+            "sadstory_delstyle": """【/sadstory_delstyle】删除写作风格
+用法：/sadstory_delstyle ID
+说明：ID 可通过 /sadstory_style 查看""",
+            
+            "sadstory_aistyle": """【/sadstory_aistyle】AI 生成写作风格
+用法：/sadstory_aistyle 风格描述
+示例：/sadstory_aistyle 温柔治愈风，像深夜电台主播讲故事""",
+            
+            "sadstory_listtpl": """【/sadstory_listtpl】查看故事模板列表
+用法：/sadstory_listtpl
+说明：显示所有故事模板""",
+            
+            "sadstory_addtpl": """【/sadstory_addtpl】添加故事模板
+用法：/sadstory_addtpl 模板名
+（换行后跟模板内容）
+示例：
+  /sadstory_addtpl 校园故事
+  她是有点偏执的那种...""",
+            
+            "sadstory_usetpl": """【/sadstory_usetpl】启用/禁用模板
+用法：/sadstory_usetpl ID
+说明：ID 可通过 /sadstory_listtpl 查看""",
+            
+            "sadstory_deltpl": """【/sadstory_deltpl】删除故事模板
+用法：/sadstory_deltpl ID
+说明：ID 可通过 /sadstory_listtpl 查看""",
+            
+            "sadstory_aitpl": """【/sadstory_aitpl】AI 生成故事模板
+用法：/sadstory_aitpl 故事描述
+示例：/sadstory_aitpl 大学毕业后才发现暗恋的人也喜欢自己""",
+        }
+        
+        if message_str and message_str in help_content:
+            yield event.plain_result(help_content[message_str])
+        elif message_str:
+            yield event.plain_result(f"未找到指令 '{message_str}'\n输入 /sadstory_help 查看所有指令")
+        else:
+            all_cmds = """【伪装聊天插件 - 指令帮助】
+
+基础指令：
+  /sadstory - 生成伪装聊天
+  /sadstory_nest - 生成嵌套转发聊天
+
+模板管理：
+  /sadstory_listtpl - 查看模板列表
+  /sadstory_addtpl - 添加模板
+  /sadstory_usetpl - 启用/禁用模板
+  /sadstory_deltpl - 删除模板
+  /sadstory_aitpl - AI 生成模板
+
+风格管理：
+  /sadstory_style - 查看风格列表
+  /sadstory_addstyle - 添加风格
+  /sadstory_usestyle - 启用/禁用风格
+  /sadstory_delstyle - 删除风格
+  /sadstory_aistyle - AI 生成风格
+
+其他：
+  /sadstory_config - 查看配置
+  /sadstory_reload - 重载用户列表
+
+输入 /sadstory_help [指令名] 查看详细用法
+示例：/sadstory_help sadstory_nest"""
+            yield event.plain_result(all_cmds)
+
     @filter.command("sadstory_nest")
     async def sadstory_nest(self, event: AiocqhttpMessageEvent):
         async for result in self.nest_handler.handle_nest_command(event):
