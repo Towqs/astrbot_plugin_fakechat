@@ -1482,34 +1482,35 @@ class SadStoryPlugin(Star):
         if message_str and message_str in help_content:
             yield event.plain_result(help_content[message_str])
         elif message_str:
-            yield event.plain_result(f"未找到指令 '{message_str}'\n输入 /sadstory_help 查看所有指令")
+            available = ", ".join(sorted(help_content.keys()))
+            yield event.plain_result(f"❌ 未找到指令 '{message_str}'\n\n可用指令：{available}\n\n输入 /sadstory_help [指令名] 查看详细用法")
         else:
             all_cmds = """【伪装聊天插件 - 指令帮助】
 
-基础指令：
+📌 基础指令
   /sadstory - 生成伪装聊天
   /sadstory_nest - 生成嵌套转发聊天
 
-模板管理：
+📝 模板管理
   /sadstory_listtpl - 查看模板列表
-  /sadstory_addtpl - 添加模板
+  /sadstory_addtpl - 添加模板 🔒管理员
   /sadstory_usetpl - 启用/禁用模板
-  /sadstory_deltpl - 删除模板
+  /sadstory_deltpl - 删除模板 🔒管理员
   /sadstory_aitpl - AI 生成模板
 
-风格管理：
+🎨 风格管理
   /sadstory_style - 查看风格列表
-  /sadstory_addstyle - 添加风格
+  /sadstory_addstyle - 添加风格 🔒管理员
   /sadstory_usestyle - 启用/禁用风格
-  /sadstory_delstyle - 删除风格
+  /sadstory_delstyle - 删除风格 🔒管理员
   /sadstory_aistyle - AI 生成风格
 
-其他：
+⚙️ 其他
   /sadstory_config - 查看配置
   /sadstory_reload - 重载用户列表
 
-输入 /sadstory_help [指令名] 查看详细用法
-示例：/sadstory_help sadstory_nest"""
+💡 输入 /sadstory_help [指令名] 查看详细用法
+   示例：/sadstory_help sadstory_nest"""
             yield event.plain_result(all_cmds)
 
     @filter.command("sadstory_nest")
