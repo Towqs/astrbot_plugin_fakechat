@@ -83,25 +83,36 @@ class NestCommandHandler:
             if not self.plugin.use_virtual_users:
                 exclude_ids = {p["user_id"] for p in protagonists}
                 exclude_ids.add(outer_sender["user_id"])
-                bystander_needed = self.plugin.bystander_count + 5
-                bystanders = await self.plugin._fetch_random_bystanders(
+                bystander_needed = self.plugin.bystander_count * 2 + 5
+                all_bystanders = await self.plugin._fetch_random_bystanders(
                     event.bot, group_id, bystander_needed, exclude_ids
                 )
+                outer_commentators = all_bystanders[:self.plugin.bystander_count]
+                inner_bystanders = all_bystanders[self.plugin.bystander_count:self.plugin.bystander_count * 2]
             else:
-                bystanders = [
+                outer_commentators = [
                     {"nickname": "路人甲", "user_id": "10001"},
                     {"nickname": "路人乙", "user_id": "10002"},
+                ]
+                inner_bystanders = [
                     {"nickname": "路人丙", "user_id": "10003"},
+                    {"nickname": "路人丁", "user_id": "10004"},
                 ]
 
-            commentators = bystanders[:self.plugin.bystander_count] if bystanders else []
-            if len(commentators) < 2:
-                commentators = bystanders if bystanders else [
+            if len(outer_commentators) < 2:
+                outer_commentators = outer_commentators if outer_commentators else [
                     {"nickname": "路人甲", "user_id": "10001"},
                     {"nickname": "路人乙", "user_id": "10002"},
                 ]
+            
+            if len(inner_bystanders) < 2:
+                inner_bystanders = inner_bystanders if inner_bystanders else [
+                    {"nickname": "路人丙", "user_id": "10003"},
+                    {"nickname": "路人丁", "user_id": "10004"},
+                ]
 
-            logger.info(f"[SadStory] 嵌套模式 - 围观网友: {[c['nickname'] for c in commentators]}")
+            logger.info(f"[SadStory] 嵌套模式 - 外层围观网友: {[c['nickname'] for c in outer_commentators]}")
+            logger.info(f"[SadStory] 嵌套模式 - 内层围观网友: {[c['nickname'] for c in inner_bystanders]}")
 
             yield event.plain_result("正在生成嵌套聊天记录，请稍候...")
 
@@ -113,7 +124,7 @@ class NestCommandHandler:
                 self.plugin.chat_provider_id,
                 event.unified_msg_origin,
                 protagonists,
-                commentators,
+                inner_bystanders,
                 theme=theme,
                 total_msg_count=total_inner_msg
             )
@@ -133,7 +144,7 @@ class NestCommandHandler:
                 self.plugin.chat_provider_id,
                 event.unified_msg_origin,
                 outer_sender,
-                commentators,
+                outer_commentators,
                 nest_count,
                 story_summary,
                 theme
