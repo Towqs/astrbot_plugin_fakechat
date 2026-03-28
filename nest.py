@@ -113,7 +113,7 @@ class NestChatGenerator:
         protagonist_names = "、".join([p["nickname"] for p in protagonists])
         bystander_names = "、".join([b["nickname"] for b in bystanders]) if bystanders else "无"
 
-        if theme:
+        if theme and theme.strip():
             prompt = self._build_random_inner_prompt(protagonist_names, bystander_names, msg_count)
         else:
             prompt = self._build_theme_inner_prompt(protagonist_names, bystander_names, msg_count, "日常闲聊")
@@ -138,17 +138,26 @@ class NestChatGenerator:
             return []
 
     def _build_theme_inner_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int, theme: str) -> str:
-        return f"""你是一个聊天记录生成器。请生成一段简短的群聊对话。
+        return f"""你是一个聊天记录生成器。请生成一段真实的群聊对话。
 
-主角：{protagonist_names}
-围观网友：{bystander_names}
+角色设定：
+- 主角：{protagonist_names}
+- 围观网友：{bystander_names}
+
+核心要求：
+1. 模拟真实群聊，一个人可以连发几条消息，另一个人再回应
+2. 每条消息1-2句话，很短很碎，像真人在群里打字
+3. 对话要有具体内容：可以是吐槽某件事、讨论某个话题、分享经历、互相调侃等
+4. 不要只发"哈哈"、"嗯"、"好的"这种无意义的消息
+5. 围观网友偶尔插嘴，但主角是主要发言者
+6. 主题方向：{theme}
+
+风格参考：
+- 节奏自然：A连发2-3条 → B回1-2条 → A再发
+- 语气口语化，像朋友闲聊
+- 可以有情绪表达、吐槽、调侃
+
 消息条数：{msg_count} 条左右
-主题：{theme}
-
-要求：
-1. 对话要围绕主题展开
-2. 每条消息简短自然，像真实聊天
-3. 主角和围观网友都要参与
 
 请严格按以下 JSON 数组格式输出，不要输出任何其他内容：
 [
@@ -157,16 +166,26 @@ class NestChatGenerator:
 ]"""
 
     def _build_random_inner_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int) -> str:
-        return f"""你是一个聊天记录生成器。请生成一段随意的日常群聊对话。
+        return f"""你是一个聊天记录生成器。请生成一段真实的群聊对话。
 
-主角：{protagonist_names}
-围观网友：{bystander_names}
+角色设定：
+- 主角：{protagonist_names}
+- 围观网友：{bystander_names}
+
+核心要求：
+1. 模拟真实群聊，一个人可以连发几条消息，另一个人再回应
+2. 每条消息1-2句话，很短很碎，像真人在群里打字
+3. 对话要有具体内容：可以是吐槽某件事、讨论某个话题、分享经历、互相调侃等
+4. 不要只发"哈哈"、"嗯"、"好的"这种无意义的消息
+5. 围观网友偶尔插嘴，但主角是主要发言者
+6. 内容随机：可以是日常闲聊、吐槽、搞笑、八卦等
+
+风格参考：
+- 节奏自然：A连发2-3条 → B回1-2条 → A再发
+- 语气口语化，像朋友闲聊
+- 可以有情绪表达、吐槽、调侃
+
 消息条数：{msg_count} 条左右
-
-要求：
-1. 内容随意，可以是日常闲聊、吐槽、搞笑等
-2. 每条消息简短自然，像真实聊天
-3. 主角和围观网友都要参与
 
 请严格按以下 JSON 数组格式输出，不要输出任何其他内容：
 [
