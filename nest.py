@@ -128,7 +128,7 @@ class NestChatGenerator:
                 provider_id = await context.get_current_chat_provider_id(unified_msg_origin)
             llm_resp = await asyncio.wait_for(
                 context.llm_generate(chat_provider_id=provider_id, prompt=prompt),
-                timeout=60.0
+                timeout=120.0
             )
             raw = llm_resp.completion_text.strip()
             messages = self._parse_llm_response(raw, all_users)
