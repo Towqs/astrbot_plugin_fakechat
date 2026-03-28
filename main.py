@@ -486,9 +486,8 @@ class SadStoryPlugin(Star):
         return sender_id in self.allowed_users
 
     async def _is_admin(self, event: AiocqhttpMessageEvent) -> bool:
-        """检查用户是否为 AstrBot 配置的管理员"""
         sender_id = str(event.get_sender_id())
-        admins = self.context.get("admins", [])
+        admins = self.config.get("admins_id", [])
         return sender_id in [str(a) for a in admins]
 
     async def _check_daily_usage(self, event: AiocqhttpMessageEvent) -> tuple[bool, int, int]:
