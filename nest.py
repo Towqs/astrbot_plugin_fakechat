@@ -99,6 +99,7 @@ class NestChatGenerator:
         self,
         context,
         chat_provider_id: str,
+        unified_msg_origin: str,
         protagonists: list,
         bystanders: list,
         theme: Optional[str] = None,
@@ -124,7 +125,7 @@ class NestChatGenerator:
             if chat_provider_id:
                 provider_id = chat_provider_id
             else:
-                provider_id = await context.get_current_chat_provider_id()
+                provider_id = await context.get_current_chat_provider_id(unified_msg_origin)
             llm_resp = await asyncio.wait_for(
                 context.llm_generate(chat_provider_id=provider_id, prompt=prompt),
                 timeout=60.0

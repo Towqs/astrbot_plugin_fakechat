@@ -117,6 +117,7 @@ class NestCommandHandler:
                 inner_messages = await self.nest_generator.generate_inner_chat_by_llm(
                     self.plugin.context,
                     self.plugin.chat_provider_id,
+                    event.unified_msg_origin,
                     protagonists,
                     bystanders,
                     theme=theme,
