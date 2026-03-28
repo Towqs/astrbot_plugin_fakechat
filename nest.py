@@ -118,7 +118,7 @@ class NestChatGenerator:
         if theme:
             prompt = self._build_random_inner_prompt(protagonist_names, bystander_names, msg_count)
         else:
-            prompt = self._build_theme_inner_prompt(protagonist_names, bystander_names, msg_count, theme)
+            prompt = self._build_theme_inner_prompt(protagonist_names, bystander_names, msg_count, "日常闲聊")
 
         try:
             if chat_provider_id:

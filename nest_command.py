@@ -114,13 +114,12 @@ class NestCommandHandler:
             nest_messages = []
 
             for i in range(nest_count):
-                inner_theme = None if theme else None
                 inner_messages = await self.nest_generator.generate_inner_chat_by_llm(
                     self.plugin.context,
                     self.plugin.chat_provider_id,
                     protagonists,
                     bystanders,
-                    theme=inner_theme,
+                    theme=theme,
                     msg_count=random.randint(self.plugin.inner_msg_min, self.plugin.inner_msg_max)
                 )
                 if inner_messages:
