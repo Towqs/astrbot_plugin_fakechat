@@ -487,7 +487,8 @@ class SadStoryPlugin(Star):
 
     async def _is_admin(self, event: AiocqhttpMessageEvent) -> bool:
         sender_id = str(event.get_sender_id())
-        admins = self.config.get("admins_id", [])
+        core_config = self.context.get_config()
+        admins = core_config.get("admins_id", []) if core_config else []
         return sender_id in [str(a) for a in admins]
 
     async def _check_daily_usage(self, event: AiocqhttpMessageEvent) -> tuple[bool, int, int]:

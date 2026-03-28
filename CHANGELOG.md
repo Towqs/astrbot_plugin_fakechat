@@ -1,5 +1,8 @@
 # 更新日志
 
+## v0.9.3
+- 修复管理员检测：使用 context.get_config() 获取核心配置中的 admins_id
+
 ## v0.9.2
 - 修复帮助指令报错：使用正确的 config.get("admins_id") 获取管理员列表
 
