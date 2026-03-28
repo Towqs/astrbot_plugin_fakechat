@@ -100,6 +100,7 @@ class NestChatGenerator:
         outer_sender: dict,
         commentators: list,
         nest_count: int,
+        story_summary: str = "",
         theme: Optional[str] = None
     ) -> list:
         all_users = [outer_sender] + commentators
@@ -110,7 +111,7 @@ class NestChatGenerator:
         outer_sender_name = outer_sender["nickname"]
         commentator_names = "、".join([c["nickname"] for c in commentators])
 
-        prompt = self._build_outer_prompt(outer_sender_name, commentator_names, nest_count, theme)
+        prompt = self._build_outer_prompt(outer_sender_name, commentator_names, nest_count, story_summary, theme)
 
         try:
             if chat_provider_id:
@@ -131,8 +132,13 @@ class NestChatGenerator:
             logger.error(f"[SadStory] 外层 LLM 生成失败: {e}")
             return []
 
-    def _build_outer_prompt(self, outer_sender_name: str, commentator_names: str, nest_count: int, theme: Optional[str]) -> str:
-        theme_instruction = f"话题方向：{theme}" if theme and theme.strip() else "话题方向：随机（可以是感人的、搞笑的、八卦的、吐槽的等）"
+    def _build_outer_prompt(self, outer_sender_name: str, commentator_names: str, nest_count: int, story_summary: str, theme: Optional[str]) -> str:
+        if story_summary:
+            story_hint = f"转发内容概要：{story_summary}"
+        elif theme and theme.strip():
+            story_hint = f"转发内容主题：{theme}"
+        else:
+            story_hint = "转发内容：一个有趣的故事"
         
         return f"""你是一个聊天记录生成器。请生成一段"引导+评论"式的群聊对话。
 
@@ -140,13 +146,16 @@ class NestChatGenerator:
 - 发起人（负责引导话题、转发内容）：{outer_sender_name}
 - 围观网友（负责评论互动）：{commentator_names}
 
+{story_hint}
+
 核心要求：
 1. 发起人先发一条消息引起注意（比如"大家快看这个！""刷到一个超感人的事"等）
 2. 围观网友表示好奇/期待（比如"怎么了？""搬好小板凳了"）
 3. 发起人发 [转发消息] 占位符（表示转发了一条聊天记录，共{nest_count}条）
-4. 围观网友对转发内容发表评论（感动、震惊、吐槽等）
+4. 围观网友对转发内容发表评论（评论要跟转发内容相关！）
 5. 每条消息1-2句话，很短很碎，像真人在群里打字
-6. {theme_instruction}
+
+重要：评论内容必须跟转发的聊天记录内容相关！
 
 格式要求：
 - 在发起人转发内容的位置，用 [转发消息] 作为占位符
@@ -157,8 +166,8 @@ class NestChatGenerator:
 1. 发起人：引起注意的消息
 2. 网友：好奇/期待
 3. 发起人：[转发消息]
-4. 网友：评论1
-5. 网友：评论2
+4. 网友：评论1（要跟内容相关！）
+5. 网友：评论2（要跟内容相关！）
 ...
 
 请严格按以下 JSON 数组格式输出，不要输出任何其他内容：
@@ -229,9 +238,9 @@ class NestChatGenerator:
         bystander_names = "、".join([b["nickname"] for b in bystanders]) if bystanders else "无"
 
         if theme and theme.strip():
-            prompt = self._build_random_inner_prompt(protagonist_names, bystander_names, msg_count)
+            prompt = self._build_theme_inner_prompt(protagonist_names, bystander_names, msg_count, theme)
         else:
-            prompt = self._build_theme_inner_prompt(protagonist_names, bystander_names, msg_count, "日常闲聊")
+            prompt = self._build_random_inner_prompt(protagonist_names, bystander_names, msg_count)
 
         try:
             if chat_provider_id:
@@ -251,6 +260,111 @@ class NestChatGenerator:
         except Exception as e:
             logger.error(f"[SadStory] 嵌套内层 LLM 生成失败: {e}")
             return []
+
+    async def generate_full_inner_story(
+        self,
+        context,
+        chat_provider_id: str,
+        unified_msg_origin: str,
+        protagonists: list,
+        bystanders: list,
+        theme: Optional[str] = None,
+        total_msg_count: int = 20
+    ) -> list:
+        all_users = protagonists + bystanders
+        if len(all_users) < 2:
+            logger.warning("[SadStory] 内层故事用户不足，至少需要2人")
+            return []
+
+        protagonist_names = "、".join([p["nickname"] for p in protagonists])
+        bystander_names = "、".join([b["nickname"] for b in bystanders]) if bystanders else "无"
+
+        prompt = self._build_full_story_prompt(protagonist_names, bystander_names, total_msg_count, theme)
+
+        try:
+            if chat_provider_id:
+                provider_id = chat_provider_id
+            else:
+                provider_id = await context.get_current_chat_provider_id(unified_msg_origin)
+            llm_resp = await asyncio.wait_for(
+                context.llm_generate(chat_provider_id=provider_id, prompt=prompt),
+                timeout=180.0
+            )
+            raw = llm_resp.completion_text.strip()
+            messages = self._parse_llm_response(raw, all_users)
+            return messages
+        except asyncio.TimeoutError:
+            logger.error("[SadStory] 完整故事 LLM 生成超时")
+            return []
+        except Exception as e:
+            logger.error(f"[SadStory] 完整故事 LLM 生成失败: {e}")
+            return []
+
+    def _build_full_story_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int, theme: Optional[str]) -> str:
+        theme_instruction = f"故事主题：{theme}" if theme and theme.strip() else "故事主题：随机（可以是感人的、搞笑的、八卦的、温馨的等）"
+        
+        return f"""你是一个聊天记录生成器。请生成一段完整的、有情节发展的群聊对话。
+
+角色设定：
+- 主角：{protagonist_names}（故事的主要讲述者/经历者）
+- 围观网友：{bystander_names}（偶尔插嘴评论）
+
+核心要求：
+1. 这是一个完整的故事，要有起承转合
+2. 主角通过连续发消息讲述/经历某件事
+3. 每条消息1-2句话，很短很碎，像真人在群里打字
+4. 故事要有具体内容：可以是分享一段经历、吐槽一件事、讲述一个故事等
+5. 围观网友偶尔插嘴评论（总共3-5条即可）
+6. {theme_instruction}
+
+故事结构：
+- 开头：引入话题/事件
+- 发展：事情的经过
+- 高潮：关键转折/情感爆发
+- 结尾：结局/感慨
+
+总消息条数：{msg_count} 条左右
+
+请严格按以下 JSON 数组格式输出，不要输出任何其他内容：
+[
+  {{"speaker": "说话人昵称", "content": "消息内容"}},
+  ...
+]"""
+
+    def split_story_into_parts(self, messages: list, part_count: int) -> list:
+        if not messages or part_count <= 0:
+            return []
+        
+        if part_count == 1:
+            return [messages]
+        
+        total_len = len(messages)
+        base_size = total_len // part_count
+        remainder = total_len % part_count
+        
+        parts = []
+        start = 0
+        
+        for i in range(part_count):
+            size = base_size + (1 if i < remainder else 0)
+            if start + size <= total_len:
+                parts.append(messages[start:start + size])
+                start += size
+            elif start < total_len:
+                parts.append(messages[start:])
+                break
+        
+        while len(parts) < part_count and parts:
+            parts.append([])
+        
+        return [p for p in parts if p]
+
+    def get_story_summary(self, messages: list) -> str:
+        if not messages:
+            return "一个有趣的故事"
+        
+        contents = [msg["content"] for msg in messages[:5]]
+        return " ".join(contents)[:200]
 
     def _build_theme_inner_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int, theme: str) -> str:
         return f"""你是一个聊天记录生成器。请生成一段真实的群聊对话。

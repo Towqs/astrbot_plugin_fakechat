@@ -106,6 +106,27 @@ class NestCommandHandler:
             yield event.plain_result("正在生成嵌套聊天记录，请稍候...")
 
             nest_count = random.randint(self.plugin.nest_count_min, self.plugin.nest_count_max)
+            total_inner_msg = nest_count * random.randint(self.plugin.inner_msg_min, self.plugin.inner_msg_max)
+
+            full_story = await self.nest_generator.generate_full_inner_story(
+                self.plugin.context,
+                self.plugin.chat_provider_id,
+                event.unified_msg_origin,
+                protagonists,
+                commentators,
+                theme=theme,
+                total_msg_count=total_inner_msg
+            )
+            if not full_story:
+                yield event.plain_result("故事生成失败，请稍后再试~")
+                return
+
+            story_parts = self.nest_generator.split_story_into_parts(full_story, nest_count)
+            if not story_parts:
+                yield event.plain_result("故事分割失败，请稍后再试~")
+                return
+
+            story_summary = self.nest_generator.get_story_summary(full_story)
 
             outer_messages = await self.nest_generator.generate_outer_chat_by_llm(
                 self.plugin.context,
@@ -114,6 +135,7 @@ class NestCommandHandler:
                 outer_sender,
                 commentators,
                 nest_count,
+                story_summary,
                 theme
             )
             if not outer_messages:
@@ -121,20 +143,11 @@ class NestCommandHandler:
                 return
 
             nest_messages = []
-            for i in range(nest_count):
-                inner_messages = await self.nest_generator.generate_inner_chat_by_llm(
-                    self.plugin.context,
-                    self.plugin.chat_provider_id,
-                    event.unified_msg_origin,
-                    protagonists,
-                    commentators,
-                    theme=theme,
-                    msg_count=random.randint(self.plugin.inner_msg_min, self.plugin.inner_msg_max)
-                )
-                if inner_messages:
-                    nest_node = self.nest_generator.build_nest_node(outer_sender, inner_messages)
+            for i, part in enumerate(story_parts):
+                if part:
+                    nest_node = self.nest_generator.build_nest_node(outer_sender, part)
                     nest_messages.append(nest_node)
-                    logger.info(f"[SadStory] 生成嵌套聊天记录 {i+1}/{nest_count}")
+                    logger.info(f"[SadStory] 构建嵌套消息块 {i+1}/{len(story_parts)}")
 
             final_messages = self._merge_outer_with_nest(outer_messages, nest_messages)
 
