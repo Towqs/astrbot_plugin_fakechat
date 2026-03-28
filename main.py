@@ -1518,21 +1518,40 @@ class SadStoryPlugin(Star):
 💡 输入 /sadstory_help [指令名] 查看详细用法
    示例：/sadstory_help sadstory_nest"""
             else:
-                all_cmds = """【伪装聊天插件 - 指令帮助】
+                all_cmds = """【伪装聊天插件 - 使用说明】
 
-📌 基础指令
-  /sadstory - 生成伪装聊天
-  /sadstory_nest - 生成嵌套转发聊天
+━━━━ /sadstory ━━━━
+生成一段伪装的群聊记录
 
-📝 模板与风格
-  /sadstory_listtpl - 查看模板列表
-  /sadstory_style - 查看风格列表
+用法：
+  /sadstory                    随机生成一个故事
+  /sadstory 校园暗恋           指定主题生成
+  /sadstory @小明              指定主角
+  /sadstory 校园暗恋 @小明     指定主题+主角
+  /sadstory 校园暗恋 @小明 @小红   双主角模式
 
-⚙️ 其他
-  /sadstory_config - 查看配置
+说明：
+  • 不艾特人：随机选择主角
+  • 艾特1人：该用户为主角
+  • 艾特2人：双主角模式，两人互动
 
-💡 输入 /sadstory_help [指令名] 查看详细用法
-   示例：/sadstory_help sadstory_nest"""
+━━━━ /sadstory_nest ━━━━
+生成嵌套转发聊天（更真实）
+
+用法：
+  /sadstory_nest @转发者 @主角
+  /sadstory_nest @转发者 @主角A @主角B
+  /sadstory_nest @转发者 @主角 感人的故事
+
+说明：
+  • 第一个艾特：外层转发消息的人
+  • 第二个艾特起：内层故事主角
+  • 最后可加主题文字
+
+━━━━ 其他指令 ━━━━
+  /sadstory_config - 查看当前配置
+
+💡 每日使用次数有限制，管理员无限制"""
             yield event.plain_result(all_cmds)
 
     @filter.command("sadstory_nest")
