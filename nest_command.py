@@ -80,9 +80,6 @@ class NestCommandHandler:
             if len(theme) > 100:
                 theme = theme[:100]
 
-            is_dual_mode = len(protagonists) == 2
-            is_single_mode = len(protagonists) == 1
-
             if not self.plugin.use_virtual_users:
                 exclude_ids = {p["user_id"] for p in protagonists}
                 exclude_ids.add(outer_sender["user_id"])
@@ -90,36 +87,47 @@ class NestCommandHandler:
                 bystanders = await self.plugin._fetch_random_bystanders(
                     event.bot, group_id, bystander_needed, exclude_ids
                 )
-                user_pool = protagonists + bystanders
             else:
-                user_pool = [
+                bystanders = [
                     {"nickname": "路人甲", "user_id": "10001"},
                     {"nickname": "路人乙", "user_id": "10002"},
                     {"nickname": "路人丙", "user_id": "10003"},
                 ]
-                bystanders = user_pool[len(protagonists):]
 
-            logger.info(f"[SadStory] 嵌套模式用户池大小: {len(user_pool)}")
+            commentators = bystanders[:self.plugin.bystander_count] if bystanders else []
+            if len(commentators) < 2:
+                commentators = bystanders if bystanders else [
+                    {"nickname": "路人甲", "user_id": "10001"},
+                    {"nickname": "路人乙", "user_id": "10002"},
+                ]
+
+            logger.info(f"[SadStory] 嵌套模式 - 围观网友: {[c['nickname'] for c in commentators]}")
 
             yield event.plain_result("正在生成嵌套聊天记录，请稍候...")
 
-            main_messages = await self.plugin._generate_story(
-                event, theme, protagonists if is_dual_mode else (protagonists if is_single_mode else None), user_pool
+            nest_count = random.randint(self.plugin.nest_count_min, self.plugin.nest_count_max)
+
+            outer_messages = await self.nest_generator.generate_outer_chat_by_llm(
+                self.plugin.context,
+                self.plugin.chat_provider_id,
+                event.unified_msg_origin,
+                outer_sender,
+                commentators,
+                nest_count,
+                theme
             )
-            if not main_messages:
-                yield event.plain_result("生成失败了，可能是用户池不足或 LLM 服务暂时不可用，请稍后再试~")
+            if not outer_messages:
+                yield event.plain_result("外层消息生成失败，请稍后再试~")
                 return
 
-            nest_count = random.randint(self.plugin.nest_count_min, self.plugin.nest_count_max)
             nest_messages = []
-
             for i in range(nest_count):
                 inner_messages = await self.nest_generator.generate_inner_chat_by_llm(
                     self.plugin.context,
                     self.plugin.chat_provider_id,
                     event.unified_msg_origin,
                     protagonists,
-                    bystanders,
+                    commentators,
                     theme=theme,
                     msg_count=random.randint(self.plugin.inner_msg_min, self.plugin.inner_msg_max)
                 )
@@ -128,7 +136,7 @@ class NestCommandHandler:
                     nest_messages.append(nest_node)
                     logger.info(f"[SadStory] 生成嵌套聊天记录 {i+1}/{nest_count}")
 
-            final_messages = self.nest_generator.merge_with_main_story(main_messages, nest_messages)
+            final_messages = self._merge_outer_with_nest(outer_messages, nest_messages)
 
             nodes = self._build_forward_nodes_with_nest(final_messages)
             await event.bot.send_group_forward_msg(
@@ -142,6 +150,24 @@ class NestCommandHandler:
         finally:
             if not success:
                 await self._clear_cooldown(group_id_str)
+
+    def _merge_outer_with_nest(self, outer_messages: list, nest_messages: list) -> list:
+        result = []
+        nest_index = 0
+        
+        for msg in outer_messages:
+            if msg.get("is_forward_placeholder"):
+                if nest_index < len(nest_messages):
+                    result.append(nest_messages[nest_index])
+                    nest_index += 1
+            else:
+                result.append(msg)
+        
+        while nest_index < len(nest_messages):
+            result.append(nest_messages[nest_index])
+            nest_index += 1
+        
+        return result
 
     def _build_forward_nodes_with_nest(self, messages: list) -> list:
         nodes = []

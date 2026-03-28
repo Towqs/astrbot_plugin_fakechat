@@ -92,6 +92,121 @@ class NestChatGenerator:
             "is_nest": True
         }
 
+    async def generate_outer_chat_by_llm(
+        self,
+        context,
+        chat_provider_id: str,
+        unified_msg_origin: str,
+        outer_sender: dict,
+        commentators: list,
+        nest_count: int,
+        theme: Optional[str] = None
+    ) -> list:
+        all_users = [outer_sender] + commentators
+        if len(all_users) < 2:
+            logger.warning("[SadStory] 外层用户不足，至少需要2人")
+            return []
+
+        outer_sender_name = outer_sender["nickname"]
+        commentator_names = "、".join([c["nickname"] for c in commentators])
+
+        prompt = self._build_outer_prompt(outer_sender_name, commentator_names, nest_count, theme)
+
+        try:
+            if chat_provider_id:
+                provider_id = chat_provider_id
+            else:
+                provider_id = await context.get_current_chat_provider_id(unified_msg_origin)
+            llm_resp = await asyncio.wait_for(
+                context.llm_generate(chat_provider_id=provider_id, prompt=prompt),
+                timeout=120.0
+            )
+            raw = llm_resp.completion_text.strip()
+            messages = self._parse_outer_llm_response(raw, all_users, nest_count)
+            return messages
+        except asyncio.TimeoutError:
+            logger.error("[SadStory] 外层 LLM 生成超时")
+            return []
+        except Exception as e:
+            logger.error(f"[SadStory] 外层 LLM 生成失败: {e}")
+            return []
+
+    def _build_outer_prompt(self, outer_sender_name: str, commentator_names: str, nest_count: int, theme: Optional[str]) -> str:
+        theme_instruction = f"话题方向：{theme}" if theme and theme.strip() else "话题方向：随机（可以是感人的、搞笑的、八卦的、吐槽的等）"
+        
+        return f"""你是一个聊天记录生成器。请生成一段"引导+评论"式的群聊对话。
+
+角色设定：
+- 发起人（负责引导话题、转发内容）：{outer_sender_name}
+- 围观网友（负责评论互动）：{commentator_names}
+
+核心要求：
+1. 发起人先发一条消息引起注意（比如"大家快看这个！""刷到一个超感人的事"等）
+2. 围观网友表示好奇/期待（比如"怎么了？""搬好小板凳了"）
+3. 发起人发 [转发消息] 占位符（表示转发了一条聊天记录，共{nest_count}条）
+4. 围观网友对转发内容发表评论（感动、震惊、吐槽等）
+5. 每条消息1-2句话，很短很碎，像真人在群里打字
+6. {theme_instruction}
+
+格式要求：
+- 在发起人转发内容的位置，用 [转发消息] 作为占位符
+- 总消息条数控制在 {nest_count + 4} 到 {nest_count + 8} 条
+- 发起人的消息占少数，主要是围观网友的评论
+
+示例结构：
+1. 发起人：引起注意的消息
+2. 网友：好奇/期待
+3. 发起人：[转发消息]
+4. 网友：评论1
+5. 网友：评论2
+...
+
+请严格按以下 JSON 数组格式输出，不要输出任何其他内容：
+[
+  {{"speaker": "说话人昵称", "content": "消息内容"}},
+  ...
+]"""
+
+    def _parse_outer_llm_response(self, raw: str, all_users: list, nest_count: int) -> list:
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        if start == -1 or end == 0:
+            return []
+
+        try:
+            data = json.loads(raw[start:end])
+            if not isinstance(data, list):
+                return []
+
+            messages = []
+            user_map = {u["nickname"]: u for u in all_users}
+
+            for item in data:
+                speaker = item.get("speaker", "")
+                content = item.get("content", "")
+                if not speaker or not content:
+                    continue
+
+                user = user_map.get(speaker)
+                if not user:
+                    for nick, u in user_map.items():
+                        if speaker in nick or nick in speaker:
+                            user = u
+                            break
+
+                if user:
+                    messages.append({
+                        "user_id": user["user_id"],
+                        "nickname": user["nickname"],
+                        "content": content,
+                        "is_forward_placeholder": content.strip() == "[转发消息]"
+                    })
+
+            return messages
+        except json.JSONDecodeError:
+            logger.error(f"[SadStory] 外层 JSON 解析失败: {raw[:100]}")
+            return []
+
     async def generate_inner_chat_by_llm(
         self,
         context,
