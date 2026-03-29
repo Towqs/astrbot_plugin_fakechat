@@ -188,11 +188,10 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 - 围观网友（偶尔插嘴）：{bystanders}
 
 核心要求（必须遵守）：
-- 模拟真实深夜聊天的氛围感，不是刻意的对话练习
-- 一个人可以连发2-3条倾诉/感慨，另一人再发几条回应
-- 每条消息1-3句话，文字细腻有画面感，但保持聊天的自然节奏
-- 语气温柔、克制，带着深夜独有的安静和感慨
-- 整体像深夜电台，两个人慢慢聊开，有默契有留白
+- 【极致克制】：拒绝任何青春疼痛文学感！不要用华丽的辞藻（严禁出现“犹如、宛若、星辰、宿命”等词），用最平常的大白话表达遗憾、回忆或迷茫。
+- 【碎碎念节奏】：一个人倾诉时，把一段话拆成2-3条短消息连发，模拟边想边打字的状态。可以多用省略号“...”或顿号“、”体现停顿。
+- 【真实回应】：倾听者不要像心理医生一样讲大道理，多用“哎”、“确实”、“抱抱”、“太懂了”这种简短的情绪共鸣，或者分享一句自己类似的经历。
+- 【群聊生态】：群里不是真空的。围观网友（{bystanders}）偶尔发一句“大半夜的别发刀子”、“我都看哭了”、“这大实话扎心了”，总共插入3-5条即可。
 
 风格参考（非常重要）：
 - 节奏自然：比如A连发2条回忆 → B发1条共鸣 → A再发1条感慨 → B发个表情
@@ -210,14 +209,15 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请根据以
 
 示例（假设主角A是"林夕"，主角B是"雨彤"，网友有"夜猫子"）：
 [
-  {{"speaker": "林夕", "content": "睡不着，突然想起以前的事"}},
-  {{"speaker": "林夕", "content": "大学那会儿，好像什么都不怕"}},
-  {{"speaker": "雨彤", "content": "我懂那种感觉"}},
-  {{"speaker": "林夕", "content": "现在想想，那时候真傻"}},
-  {{"speaker": "雨彤", "content": "但不后悔吧"}},
-  {{"speaker": "夜猫子", "content": "深夜好伤感"}},
-  {{"speaker": "林夕", "content": "哈哈被你发现了"}},
-  {{"speaker": "雨彤", "content": "有些事回不去，但记得也挺好的"}}
+{{"speaker": "林夕", "content": "大半夜的，突然翻到以前的相册"}},
+  {{"speaker": "林夕", "content": "五年了..."}},
+  {{"speaker": "林夕", "content": "感觉时间过得真特么快"}},
+  {{"speaker": "雨彤", "content": "哎，谁说不是呢"}},
+  {{"speaker": "雨彤", "content": "有些东西越看越睡不着"}},
+  {{"speaker": "夜猫子1号", "content": "大半夜不睡觉在这emo是吧 [哭泣]"}},
+  {{"speaker": "林夕", "content": "哈哈，有点没绷住"}},
+  {{"speaker": "雨彤", "content": "正常，过去就过去了，往前看"}},
+  {{"speaker": "夜猫子2号", "content": "摸摸你们，赶紧睡吧"}}
 ]
 
 请按此格式输出对话：
@@ -249,6 +249,12 @@ class SadStoryPlugin(Star):
         await self._import_file_templates()
         self.nest_handler = NestCommandHandler(self)
         logger.info(f"[SadStory] 插件初始化完成，主讲人: {len(self.custom_protagonists)}个, 网友: {len(self.custom_bystanders)}个")
+
+    async def terminate(self):
+        """插件卸载时清理资源"""
+        if hasattr(self, 'db') and self.db:
+            await self.db.close()
+            logger.info("[SadStory] 数据库连接已关闭")
 
     # ==================== 配置管理 ====================
 
@@ -1010,62 +1016,74 @@ class SadStoryPlugin(Star):
             yield event.plain_result("未配置素材群，请先在 WebUI 插件配置中设置素材群群号")
             return
 
-        fetched = await self._fetch_group_users(event.bot, self.source_group_id)
-        if fetched:
-            async with self._group_users_lock:
-                self.group_users_map[self.source_group_id] = fetched
-            yield event.plain_result(f"素材群用户已刷新，当前 {len(fetched)} 人")
-        else:
-            yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
+        try:
+            fetched = await self._fetch_group_users(event.bot, self.source_group_id)
+            if fetched:
+                async with self._group_users_lock:
+                    self.group_users_map[self.source_group_id] = fetched
+                yield event.plain_result(f"素材群用户已刷新，当前 {len(fetched)} 人")
+            else:
+                yield event.plain_result("刷新失败，请检查素材群号是否正确以及机器人是否在群内")
+        except Exception as e:
+            logger.error(f"[SadStory] reload_users 执行异常: {e}")
+            yield event.plain_result(f"刷新失败: {e}")
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addtpl")
     async def add_template(self, event: AiocqhttpMessageEvent):
         """添加故事模板（管理员专用）。用法：/sadstory_addtpl 模板名（换行后跟模板内容）"""
-        raw = event.message_str
-        after_cmd = raw.partition(" ")[2]
-        parts = after_cmd.split("\n", 1)
-        first_line = parts[0].strip()
-        content = parts[1].strip() if len(parts) > 1 else ""
+        try:
+            raw = event.message_str
+            after_cmd = raw.partition(" ")[2]
+            parts = after_cmd.split("\n", 1)
+            first_line = parts[0].strip()
+            content = parts[1].strip() if len(parts) > 1 else ""
 
-        if not first_line:
-            yield event.plain_result("用法：/sadstory_addtpl 模板名\n（换行后跟模板内容）\n\n示例：\n/sadstory_addtpl 校园故事\n她是有点偏执的那种...")
-            return
+            if not first_line:
+                yield event.plain_result("用法：/sadstory_addtpl 模板名\n（换行后跟模板内容）\n\n示例：\n/sadstory_addtpl 校园故事\n她是有点偏执的那种...")
+                return
 
-        if not content:
-            yield event.plain_result("模板内容不能为空，请在模板名后换行输入故事内容")
-            return
+            if not content:
+                yield event.plain_result("模板内容不能为空，请在模板名后换行输入故事内容")
+                return
 
-        if len(content) > 10000:
-            yield event.plain_result("模板内容过长，请控制在 10000 字以内")
-            return
+            if len(content) > 10000:
+                yield event.plain_result("模板内容过长，请控制在 10000 字以内")
+                return
 
-        tpl_id = await self.db.add_template(first_line, content)
-        if tpl_id is None:
-            yield event.plain_result(f"模板「{first_line}」已存在，请使用新名称")
-            return
-        yield event.plain_result(f"模板「{first_line}」已保存到数据库（ID:{tpl_id}，{len(content)}字）")
+            tpl_id = await self.db.add_template(first_line, content)
+            if tpl_id is None:
+                yield event.plain_result(f"模板「{first_line}」已存在，请使用新名称")
+                return
+            yield event.plain_result(f"模板「{first_line}」已保存到数据库（ID:{tpl_id}，{len(content)}字）")
+        except Exception as e:
+            logger.error(f"[SadStory] add_template 执行异常: {e}")
+            yield event.plain_result(f"添加模板失败: {e}")
 
     @filter.command("sadstory_listtpl")
     async def list_templates(self, event: AiocqhttpMessageEvent):
         """查看所有故事模板。用法：/sadstory_listtpl"""
         if not self._check_permission(event):
             return
-        db_tpls = await self.db.get_templates()
+        try:
+            db_tpls = await self.db.get_templates()
 
-        if not db_tpls:
-            yield event.plain_result("暂无故事模板\n用 /sadstory_addtpl 添加")
-            return
+            if not db_tpls:
+                yield event.plain_result("暂无故事模板\n用 /sadstory_addtpl 添加")
+                return
 
-        lines = [f"📝 故事模板列表（共{len(db_tpls)}个）："]
-        for tpl_id, name, enabled, content in db_tpls:
-            status = "✅" if enabled else "❌"
-            preview = content[:40].replace("\n", " ") + ("..." if len(content) > 40 else "")
-            lines.append(f"  {status} [{tpl_id}] {name}（{len(content)}字）：{preview}")
+            lines = [f"📝 故事模板列表（共{len(db_tpls)}个）："]
+            for tpl_id, name, enabled, content in db_tpls:
+                status = "✅" if enabled else "❌"
+                preview = content[:40].replace("\n", " ") + ("..." if len(content) > 40 else "")
+                lines.append(f"  {status} [{tpl_id}] {name}（{len(content)}字）：{preview}")
 
-        lines.append(f"\n模板参考当前{'已启用 ✅' if self.use_story_template else '已关闭 ❌'}")
-        lines.append("用 /sadstory_usetpl ID 切换启用状态")
-        yield event.plain_result("\n".join(lines))
+            lines.append(f"\n模板参考当前{'已启用 ✅' if self.use_story_template else '已关闭 ❌'}")
+            lines.append("用 /sadstory_usetpl ID 切换启用状态")
+            yield event.plain_result("\n".join(lines))
+        except Exception as e:
+            logger.error(f"[SadStory] list_templates 执行异常: {e}")
+            yield event.plain_result(f"获取模板列表失败: {e}")
 
     @filter.command("sadstory_usetpl")
     async def use_template(self, event: AiocqhttpMessageEvent):
@@ -1081,13 +1099,17 @@ class SadStoryPlugin(Star):
         except ValueError:
             yield event.plain_result("请输入模板 ID（数字）")
             return
-        result = await self.db.toggle_template(tpl_id)
-        if not result:
-            yield event.plain_result(f"ID {tpl_id} 不存在，用 /sadstory_listtpl 查看列表")
-            return
-        name, new_enabled = result
-        status = "已启用 ✅" if new_enabled else "已禁用 ❌"
-        yield event.plain_result(f"模板「{name}」{status}")
+        try:
+            result = await self.db.toggle_template(tpl_id)
+            if not result:
+                yield event.plain_result(f"ID {tpl_id} 不存在，用 /sadstory_listtpl 查看列表")
+                return
+            name, new_enabled = result
+            status = "已启用 ✅" if new_enabled else "已禁用 ❌"
+            yield event.plain_result(f"模板「{name}」{status}")
+        except Exception as e:
+            logger.error(f"[SadStory] use_template 执行异常: {e}")
+            yield event.plain_result(f"操作失败: {e}")
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_deltpl")
@@ -1102,11 +1124,15 @@ class SadStoryPlugin(Star):
         except ValueError:
             yield event.plain_result("请输入模板 ID（数字）")
             return
-        name = await self.db.delete_template(tpl_id)
-        if name:
-            yield event.plain_result(f"模板「{name}」已删除")
-        else:
-            yield event.plain_result(f"ID {tpl_id} 不存在，用 /sadstory_listtpl 查看列表")
+        try:
+            name = await self.db.delete_template(tpl_id)
+            if name:
+                yield event.plain_result(f"模板「{name}」已删除")
+            else:
+                yield event.plain_result(f"ID {tpl_id} 不存在，用 /sadstory_listtpl 查看列表")
+        except Exception as e:
+            logger.error(f"[SadStory] delete_template 执行异常: {e}")
+            yield event.plain_result(f"删除失败: {e}")
 
     # ==================== 配置预览与风格指令 ====================
 
@@ -1115,97 +1141,109 @@ class SadStoryPlugin(Star):
         """查看当前所有配置。用法：/sadstory_config"""
         if not self._check_permission(event):
             return
-        self._reload_config()
-        lines = []
-        lines.append("📋 伪装聊天 当前配置")
-        lines.append("─────────────────")
-        lines.append(f"消息条数：{self.story_min_messages} ~ {self.story_max_messages}")
-        lines.append(f"围观网友数：{self.bystander_count}")
-        lines.append(f"冷却时间：{self.cooldown_seconds}秒")
-        lines.append(f"每日使用限制：{self.daily_usage_limit}次（管理员无限制）")
-        lines.append(f"QQ表情：{'✅ 开启' if self.use_face_emoji else '❌ 关闭'}")
-        lines.append(f"虚拟角色：{'✅ 开启' if self.use_virtual_users else '❌ 关闭'}")
-        lines.append(f"群名片优先：{'✅ 是' if self.use_card_as_name else '❌ 否'}")
-        lines.append(f"LLM模型：{self.chat_provider_id or '默认'}")
-        lines.append(f"素材群：{self.source_group_id or '未配置'}")
-        lines.append(f"用户池：{len(self.user_pool)}人")
-        if self.custom_protagonists:
-            lines.append(f"主讲人：{', '.join(u['user_id'] for u in self.custom_protagonists)}")
-        if self.custom_bystanders:
-            lines.append(f"网友：{', '.join(u['user_id'] for u in self.custom_bystanders)}")
+        try:
+            self._reload_config()
+            lines = []
+            lines.append("📋 伪装聊天 当前配置")
+            lines.append("─────────────────")
+            lines.append(f"消息条数：{self.story_min_messages} ~ {self.story_max_messages}")
+            lines.append(f"围观网友数：{self.bystander_count}")
+            lines.append(f"冷却时间：{self.cooldown_seconds}秒")
+            lines.append(f"每日使用限制：{self.daily_usage_limit}次（管理员无限制）")
+            lines.append(f"QQ表情：{'✅ 开启' if self.use_face_emoji else '❌ 关闭'}")
+            lines.append(f"虚拟角色：{'✅ 开启' if self.use_virtual_users else '❌ 关闭'}")
+            lines.append(f"群名片优先：{'✅ 是' if self.use_card_as_name else '❌ 否'}")
+            lines.append(f"LLM模型：{self.chat_provider_id or '默认'}")
+            lines.append(f"素材群：{self.source_group_id or '未配置'}")
+            lines.append(f"用户池：{len(self.user_pool)}人")
+            if self.custom_protagonists:
+                lines.append(f"主讲人：{', '.join(u['user_id'] for u in self.custom_protagonists)}")
+            if self.custom_bystanders:
+                lines.append(f"网友：{', '.join(u['user_id'] for u in self.custom_bystanders)}")
 
-        styles = await self.db.get_styles()
-        lines.append("")
-        lines.append("─── 写作风格 ───")
-        if styles:
-            en = sum(1 for _, _, e, _ in styles if e)
-            for sid, name, enabled, content in styles:
-                lines.append(f"  [{sid}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
-            lines.append(f"  启用 {en}/{len(styles)}，生成时随机选取")
-        else:
-            lines.append(f"  未配置，使用内置{'口语化' if self.use_casual_style else '文学'}风格")
+            styles = await self.db.get_styles()
+            lines.append("")
+            lines.append("─── 写作风格 ───")
+            if styles:
+                en = sum(1 for _, _, e, _ in styles if e)
+                for sid, name, enabled, content in styles:
+                    lines.append(f"  [{sid}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
+                lines.append(f"  启用 {en}/{len(styles)}，生成时随机选取")
+            else:
+                lines.append(f"  未配置，使用内置{'口语化' if self.use_casual_style else '文学'}风格")
 
-        db_tpls = await self.db.get_templates()
-        lines.append("")
-        lines.append("─── 故事模板 ───")
-        lines.append(f"模板参考：{'✅ 开启' if self.use_story_template else '❌ 关闭'}")
-        if db_tpls:
-            for tpl_id, name, enabled, content in db_tpls:
-                lines.append(f"  [{tpl_id}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
-        else:
-            lines.append("  暂无模板")
+            db_tpls = await self.db.get_templates()
+            lines.append("")
+            lines.append("─── 故事模板 ───")
+            lines.append(f"模板参考：{'✅ 开启' if self.use_story_template else '❌ 关闭'}")
+            if db_tpls:
+                for tpl_id, name, enabled, content in db_tpls:
+                    lines.append(f"  [{tpl_id}] {'✅' if enabled else '❌'} {name}（{len(content)}字）")
+            else:
+                lines.append("  暂无模板")
 
-        yield event.plain_result("\n".join(lines))
+            yield event.plain_result("\n".join(lines))
+        except Exception as e:
+            logger.error(f"[SadStory] show_config 执行异常: {e}")
+            yield event.plain_result(f"获取配置失败: {e}")
 
     @filter.command("sadstory_style")
     async def show_styles(self, event: AiocqhttpMessageEvent):
         """查看写作风格列表。用法：/sadstory_style"""
         if not self._check_permission(event):
             return
-        styles = await self.db.get_styles()
-        lines = []
-        if styles:
-            en = sum(1 for _, _, e, _ in styles if e)
-            lines.append(f"🎨 写作风格（共{len(styles)}个，启用{en}个）：")
-            for sid, name, enabled, content in styles:
-                status = "✅" if enabled else "❌"
-                preview = content[:60].replace("\n", "↵ ") + ("..." if len(content) > 60 else "")
-                lines.append(f"  [{sid}] {status} {name}：{preview}")
-            lines.append("\n生成时从已启用的风格中随机选取")
-        else:
-            fallback = "口语化" if self.use_casual_style else "文学"
-            lines.append(f"🎨 写作风格：未配置，使用内置{fallback}风格")
-            lines.append("用 /sadstory_addstyle 添加自定义风格")
-        yield event.plain_result("\n".join(lines))
+        try:
+            styles = await self.db.get_styles()
+            lines = []
+            if styles:
+                en = sum(1 for _, _, e, _ in styles if e)
+                lines.append(f"🎨 写作风格（共{len(styles)}个，启用{en}个）：")
+                for sid, name, enabled, content in styles:
+                    status = "✅" if enabled else "❌"
+                    preview = content[:60].replace("\n", "↵ ") + ("..." if len(content) > 60 else "")
+                    lines.append(f"  [{sid}] {status} {name}：{preview}")
+                lines.append("\n生成时从已启用的风格中随机选取")
+            else:
+                fallback = "口语化" if self.use_casual_style else "文学"
+                lines.append(f"🎨 写作风格：未配置，使用内置{fallback}风格")
+                lines.append("用 /sadstory_addstyle 添加自定义风格")
+            yield event.plain_result("\n".join(lines))
+        except Exception as e:
+            logger.error(f"[SadStory] show_styles 执行异常: {e}")
+            yield event.plain_result(f"获取风格列表失败: {e}")
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addstyle")
     async def add_style(self, event: AiocqhttpMessageEvent):
         """添加写作风格（管理员专用）。用法：/sadstory_addstyle 风格名（换行后跟内容）"""
-        raw = event.message_str
-        after_cmd = raw.partition(" ")[2]
-        parts = after_cmd.split("\n", 1)
-        first_line = parts[0].strip()
-        content = parts[1].strip() if len(parts) > 1 else ""
-        if not first_line:
-            yield event.plain_result(
-                "用法：/sadstory_addstyle 风格名\n（换行后跟写作指令）\n\n"
-                "可用变量：{protagonist} {bystanders} {min_msg} {max_msg}\n"
-                "  {theme_line} {reference_section} {emoji_instruction}\n\n"
-                "提示：末尾记得加 JSON 输出格式要求"
-            )
-            return
-        if not content:
-            yield event.plain_result("写作指令不能为空，请在风格名后换行输入")
-            return
-        if len(content) > 5000:
-            yield event.plain_result("写作指令过长，请控制在 5000 字以内")
-            return
-        sid = await self.db.add_style(first_line, content)
-        if sid is None:
-            yield event.plain_result(f"风格「{first_line}」已存在，请使用新名称")
-            return
-        yield event.plain_result(f"风格「{first_line}」已保存（ID:{sid}，{len(content)}字）")
+        try:
+            raw = event.message_str
+            after_cmd = raw.partition(" ")[2]
+            parts = after_cmd.split("\n", 1)
+            first_line = parts[0].strip()
+            content = parts[1].strip() if len(parts) > 1 else ""
+            if not first_line:
+                yield event.plain_result(
+                    "用法：/sadstory_addstyle 风格名\n（换行后跟写作指令）\n\n"
+                    "可用变量：{protagonist} {bystanders} {min_msg} {max_msg}\n"
+                    "  {theme_line} {reference_section} {emoji_instruction}\n\n"
+                    "提示：末尾记得加 JSON 输出格式要求"
+                )
+                return
+            if not content:
+                yield event.plain_result("写作指令不能为空，请在风格名后换行输入")
+                return
+            if len(content) > 5000:
+                yield event.plain_result("写作指令过长，请控制在 5000 字以内")
+                return
+            sid = await self.db.add_style(first_line, content)
+            if sid is None:
+                yield event.plain_result(f"风格「{first_line}」已存在，请使用新名称")
+                return
+            yield event.plain_result(f"风格「{first_line}」已保存（ID:{sid}，{len(content)}字）")
+        except Exception as e:
+            logger.error(f"[SadStory] add_style 执行异常: {e}")
+            yield event.plain_result(f"添加风格失败: {e}")
 
     @filter.command("sadstory_usestyle")
     async def toggle_style(self, event: AiocqhttpMessageEvent):
@@ -1222,17 +1260,21 @@ class SadStoryPlugin(Star):
         except ValueError:
             yield event.plain_result("请输入风格 ID（数字）")
             return
-        result = await self.db.toggle_style(sid)
-        if not result:
-            yield event.plain_result(f"ID {sid} 不存在，用 /sadstory_style 查看列表")
-            return
-        name, new_enabled = result
-        status = "已启用 ✅" if new_enabled else "已禁用 ❌"
-        enabled_styles = await self.db.get_enabled_styles()
-        fallback_hint = ""
-        if not enabled_styles:
-            fallback_hint = f"\n\n⚠️ 当前没有启用的风格，将使用内置{'口语化' if self.use_casual_style else '文学'}风格"
-        yield event.plain_result(f"风格「{name}」{status}{fallback_hint}")
+        try:
+            result = await self.db.toggle_style(sid)
+            if not result:
+                yield event.plain_result(f"ID {sid} 不存在，用 /sadstory_style 查看列表")
+                return
+            name, new_enabled = result
+            status = "已启用 ✅" if new_enabled else "已禁用 ❌"
+            enabled_styles = await self.db.get_enabled_styles()
+            fallback_hint = ""
+            if not enabled_styles:
+                fallback_hint = f"\n\n⚠️ 当前没有启用的风格，将使用内置{'口语化' if self.use_casual_style else '文学'}风格"
+            yield event.plain_result(f"风格「{name}」{status}{fallback_hint}")
+        except Exception as e:
+            logger.error(f"[SadStory] toggle_style 执行异常: {e}")
+            yield event.plain_result(f"操作失败: {e}")
 
     @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_delstyle")
@@ -1247,11 +1289,15 @@ class SadStoryPlugin(Star):
         except ValueError:
             yield event.plain_result("请输入风格 ID（数字）")
             return
-        name = await self.db.delete_style(sid)
-        if name:
-            yield event.plain_result(f"风格「{name}」已删除")
-        else:
-            yield event.plain_result(f"ID {sid} 不存在")
+        try:
+            name = await self.db.delete_style(sid)
+            if name:
+                yield event.plain_result(f"风格「{name}」已删除")
+            else:
+                yield event.plain_result(f"ID {sid} 不存在")
+        except Exception as e:
+            logger.error(f"[SadStory] delete_style 执行异常: {e}")
+            yield event.plain_result(f"删除失败: {e}")
 
     # ==================== LLM 工具调用 ====================
 
@@ -1558,7 +1604,3 @@ class SadStoryPlugin(Star):
     async def sadstory_nest(self, event: AiocqhttpMessageEvent):
         async for result in self.nest_handler.handle_nest_command(event):
             yield result
-
-    async def terminate(self):
-        await self.db.close()
-        logger.info("[SadStory] 插件已卸载")

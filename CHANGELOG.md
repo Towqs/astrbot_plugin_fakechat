@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.9.4
+- 代码规范化优化：
+  - 添加 terminate() 方法，插件卸载时正确关闭数据库连接
+  - 所有命令处理函数添加异常处理，提供友好的错误提示
+  - 管理员命令使用 @filter.permission_type(PermissionType.ADMIN) 装饰器
+
 ## v0.9.3
 - 修复管理员检测：使用 context.get_config() 获取核心配置中的 admins_id
 
