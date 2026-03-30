@@ -20,8 +20,20 @@ class StickerManager:
 
     def _get_stickers_dir(self) -> str:
         if self._stickers_dir is None:
-            data_dir = StarTools.get_data_dir("astrbot_plugin_meme_manager_lite")
-            self._stickers_dir = os.path.join(data_dir, "memes")
+            default_memes_dir = os.path.join(
+                os.path.dirname(PLUGIN_DIR), 
+                "astrbot_plugin_meme_manager_lite", 
+                "default", 
+                "memes"
+            )
+            if os.path.exists(default_memes_dir):
+                self._stickers_dir = default_memes_dir
+            else:
+                try:
+                    data_dir = StarTools.get_data_dir("astrbot_plugin_meme_manager_lite")
+                    self._stickers_dir = os.path.join(data_dir, "memes")
+                except Exception:
+                    self._stickers_dir = default_memes_dir
         return self._stickers_dir
 
     def _get_sticker_image_path(self, sticker_name: str) -> str:
