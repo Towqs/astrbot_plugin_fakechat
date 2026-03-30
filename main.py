@@ -290,7 +290,6 @@ class SadStoryPlugin(Star):
         use_meme_sticker = self._parse_bool(cfg.get("use_meme_sticker", False))
         meme_sticker_frequency = self._clamp(self._parse_int(cfg.get("meme_sticker_frequency", ""), 10), 0, 100)
         self.sticker_manager.update_config(use_meme_sticker, meme_sticker_frequency)
-        logger.info(f"[SadStory] 配置加载: 主讲人={len(self.custom_protagonists)}, 网友={len(self.custom_bystanders)}, 素材群={self.source_group_id}, 贴纸={use_meme_sticker}")
 
         self.nest_count_min = self._clamp(self._parse_int(cfg.get("nest_count_min", ""), 1), 1, 5)
         self.nest_count_max = self._clamp(self._parse_int(cfg.get("nest_count_max", ""), 3), 1, 5)
@@ -328,6 +327,7 @@ class SadStoryPlugin(Star):
                 if qq:
                     self.custom_bystanders.append({"nickname": "", "user_id": qq})
 
+        logger.info(f"[SadStory] 配置加载: 主讲人={len(self.custom_protagonists)}, 网友={len(self.custom_bystanders)}, 素材群={self.source_group_id}, 贴纸={self.sticker_manager.enabled}")
         self.user_pool = self.custom_protagonists + self.custom_bystanders
 
     async def _import_webui_data(self):
