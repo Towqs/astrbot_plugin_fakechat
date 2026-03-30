@@ -817,23 +817,38 @@ class SadStoryPlugin(Star):
 
     # ==================== 合并转发构建 ====================
 
-    @staticmethod
-    def _parse_content_segments(content: str) -> list:
-        """将含有 [表情:xxx] 标记的文本解析为消息段数组"""
+    def _parse_content_segments(self, content: str) -> list:
         segments = []
         pattern = r'\[表情[:：]([^\]]+)\]'
+        sticker_pattern = r'<sticker\s+name="([^"]+)".*?/>'
+        combined_pattern = f'({pattern.pattern}|{sticker_pattern})'
+        
         last_end = 0
-
-        for match in re.finditer(pattern, content):
+        for match in re.finditer(combined_pattern, content, re.DOTALL):
             before = content[last_end:match.start()]
             if before:
                 segments.append({"type": "text", "data": {"text": before}})
-            face_name = match.group(1).strip()
-            face_id = FACE_MAP.get(face_name)
-            if face_id is not None:
-                segments.append({"type": "face", "data": {"id": str(face_id)}})
-            else:
-                segments.append({"type": "text", "data": {"text": match.group(0)}})
+            
+            matched = match.group(0)
+            if matched.startswith('[表情'):
+                face_match = re.match(pattern, matched)
+                if face_match:
+                    face_name = face_match.group(1).strip()
+                    face_id = FACE_MAP.get(face_name)
+                    if face_id is not None:
+                        segments.append({"type": "face", "data": {"id": str(face_id)}})
+                    else:
+                        segments.append({"type": "text", "data": {"text": matched}})
+            elif matched.startswith('<sticker'):
+                name_match = re.search(r'name="([^"]+)"', matched)
+                if name_match and self.sticker_manager.enabled:
+                    sticker_name = name_match.group(1)
+                    image_path = self.sticker_manager._get_sticker_image_path(sticker_name)
+                    if image_path:
+                        segments.append({"type": "image", "data": {"file": f"file:///{image_path}"}})
+                    else:
+                        logger.warning(f"[SadStory] 贴纸图片不存在: {sticker_name}")
+            
             last_end = match.end()
 
         remaining = content[last_end:]
@@ -846,7 +861,7 @@ class SadStoryPlugin(Star):
     def _build_forward_nodes(self, messages: list) -> list:
         nodes = []
         for msg in messages:
-            if self.use_face_emoji:
+            if self.use_face_emoji or self.sticker_manager.enabled:
                 content_segments = self._parse_content_segments(msg["content"])
             else:
                 content_segments = [{"type": "text", "data": {"text": msg["content"]}}]

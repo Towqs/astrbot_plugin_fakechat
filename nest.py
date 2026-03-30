@@ -18,15 +18,32 @@ class NestChatGenerator:
     def _parse_content_segments(self, content: str) -> list:
         segments = []
         pattern = r'\[表情:([^\]]+)\]'
+        sticker_pattern = r'<sticker\s+name="([^"]+)".*?/>'
+        combined_pattern = f'({pattern}|{sticker_pattern})'
         last_end = 0
-        for match in re.finditer(pattern, content):
+        
+        for match in re.finditer(combined_pattern, content, re.DOTALL):
             if match.start() > last_end:
                 text = content[last_end:match.start()]
                 if text:
                     segments.append({"type": "text", "data": {"text": text}})
-            emoji_name = match.group(1)
-            segments.append({"type": "face", "data": {"id": self._get_face_id(emoji_name)}})
+            
+            matched = match.group(0)
+            if matched.startswith('[表情'):
+                emoji_match = re.match(pattern, matched)
+                if emoji_match:
+                    emoji_name = emoji_match.group(1)
+                    segments.append({"type": "face", "data": {"id": self._get_face_id(emoji_name)}})
+            elif matched.startswith('<sticker'):
+                name_match = re.search(r'name="([^"]+)"', matched)
+                if name_match and self.sticker_manager and self.sticker_manager.enabled:
+                    sticker_name = name_match.group(1)
+                    image_path = self.sticker_manager._get_sticker_image_path(sticker_name)
+                    if image_path:
+                        segments.append({"type": "image", "data": {"file": f"file:///{image_path}"}})
+            
             last_end = match.end()
+        
         if last_end < len(content):
             text = content[last_end:]
             if text:
@@ -70,7 +87,7 @@ class NestChatGenerator:
     def build_nest_node(self, outer_user: dict, inner_messages: list) -> dict:
         inner_nodes = []
         for msg in inner_messages:
-            if self.use_face_emoji:
+            if self.use_face_emoji or (self.sticker_manager and self.sticker_manager.enabled):
                 content_segments = self._parse_content_segments(msg["content"])
             else:
                 content_segments = [{"type": "text", "data": {"text": msg["content"]}}]
