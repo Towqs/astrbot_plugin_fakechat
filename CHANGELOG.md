@@ -5,6 +5,8 @@
 - 新增配置项：启用贴纸功能、贴纸使用频率
 - 贴纸管理模块独立到 sticker.py，便于维护
 - Prompt 模板支持 {sticker_instruction} 变量
+- 修复：双主角模式 Prompt 缺少 sticker_instruction 变量
+- 修复：嵌套聊天生成（nest.py）未支持贴纸功能
 
 ## v0.9.4
 - 代码规范化优化：
