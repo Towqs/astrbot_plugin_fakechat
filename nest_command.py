@@ -17,7 +17,7 @@ class NestCommandHandler:
             "inner_msg_min": plugin.inner_msg_min,
             "inner_msg_max": plugin.inner_msg_max,
             "use_face_emoji": plugin.use_face_emoji,
-        })
+        }, sticker_manager=plugin.sticker_manager)
 
     def _check_permission(self, event: AiocqhttpMessageEvent) -> bool:
         return self.plugin._check_permission(event)

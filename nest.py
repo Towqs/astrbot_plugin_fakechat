@@ -7,12 +7,13 @@ from astrbot.api import logger
 
 
 class NestChatGenerator:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, sticker_manager=None):
         self.nest_count_min = config.get("nest_count_min", 1)
         self.nest_count_max = config.get("nest_count_max", 3)
         self.inner_msg_min = config.get("inner_msg_min", 3)
         self.inner_msg_max = config.get("inner_msg_max", 8)
         self.use_face_emoji = config.get("use_face_emoji", False)
+        self.sticker_manager = sticker_manager
 
     def _parse_content_segments(self, content: str) -> list:
         segments = []
@@ -149,18 +150,21 @@ class NestChatGenerator:
 {story_hint}
 
 核心要求：
-1. 发起人先发一条消息引起注意（比如"大家快看这个！""刷到一个超感人的事"等）
-2. 围观网友表示好奇/期待（比如"怎么了？""搬好小板凳了"）
+1. 发起人不要像播音员一样陈述，要用真实的群聊口吻和强情绪起手（例如："卧槽兄弟们"、"大半夜给我看破防了"、"气死我了这人"），绝对避免书面语
+2. 围观网友的反应要短促、自然。可以使用互联网黑话或表情符号代餐（例如："？"、"速发"、"gkd"、"搬好小板凳"、"前排"）
 3. 发起人发 [转发消息] 占位符（表示转发了一条聊天记录，共{nest_count}条）
-4. 围观网友对转发内容发表评论（评论要跟转发内容相关！）
+4. 围观网友看后发表评论，必须**高度关联转发内容中的具体细节**。不要泛泛而谈（如“太感人了”），要具体到点（例如：“看到他连夜找兽医那里我真蚌埠住了”、“这男的说话也太下头了吧”）
 5. 每条消息1-2句话，很短很碎，像真人在群里打字
 
 重要：评论内容必须跟转发的聊天记录内容相关！
+- 绝不出现长篇大论，把一个完整的意思拆成2-3条短消息连发
+- 彻底放弃标点符号规范：句末**不要用句号**；激动时连用符号（"!!!"、"？？？"）；多用空格或逗号断句。
+
 
 格式要求：
 - 在发起人转发内容的位置，用 [转发消息] 作为占位符
 - 总消息条数控制在 {nest_count + 4} 到 {nest_count + 8} 条
-- 发起人的消息占少数，主要是围观网友的评论
+- 发起人的消息占少数，主要是围观网友的评论，不要全是一个人说完另一个人说，可以有两人同时回复同一句话的交错感
 
 示例结构：
 1. 发起人：引起注意的消息
@@ -300,8 +304,14 @@ class NestChatGenerator:
             logger.error(f"[SadStory] 完整故事 LLM 生成失败: {e}")
             return []
 
+    def _get_sticker_instruction(self) -> str:
+        if self.sticker_manager:
+            return self.sticker_manager.generate_instruction()
+        return ""
+
     def _build_full_story_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int, theme: Optional[str]) -> str:
         theme_instruction = f"故事主题：{theme}" if theme and theme.strip() else "故事主题：随机（可以是感人的、搞笑的、八卦的、温馨的等）"
+        sticker_instruction = self._get_sticker_instruction()
         
         return f"""你是一个聊天记录生成器。请生成一段完整的、有情节发展的群聊对话。
 
@@ -316,7 +326,7 @@ class NestChatGenerator:
 4. 故事要有具体内容：可以是分享一段经历、吐槽一件事、讲述一个故事等
 5. 围观网友偶尔插嘴评论（总共3-5条即可）
 6. {theme_instruction}
-
+{sticker_instruction}
 故事结构：
 - 开头：引入话题/事件
 - 发展：事情的经过
@@ -367,6 +377,7 @@ class NestChatGenerator:
         return " ".join(contents)[:200]
 
     def _build_theme_inner_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int, theme: str) -> str:
+        sticker_instruction = self._get_sticker_instruction()
         return f"""你是一个聊天记录生成器。请生成一段真实的群聊对话。
 
 角色设定：
@@ -380,7 +391,7 @@ class NestChatGenerator:
 4. 不要只发"哈哈"、"嗯"、"好的"这种无意义的消息
 5. 围观网友偶尔插嘴，但主角是主要发言者
 6. 主题方向：{theme}
-
+{sticker_instruction}
 风格参考：
 - 节奏自然：A连发2-3条 → B回1-2条 → A再发
 - 语气口语化，像朋友闲聊
@@ -395,6 +406,7 @@ class NestChatGenerator:
 ]"""
 
     def _build_random_inner_prompt(self, protagonist_names: str, bystander_names: str, msg_count: int) -> str:
+        sticker_instruction = self._get_sticker_instruction()
         return f"""你是一个聊天记录生成器。请生成一段真实的群聊对话。
 
 角色设定：
@@ -408,7 +420,7 @@ class NestChatGenerator:
 4. 不要只发"哈哈"、"嗯"、"好的"这种无意义的消息
 5. 围观网友偶尔插嘴，但主角是主要发言者
 6. 内容随机：可以是日常闲聊、吐槽、搞笑、八卦等
-
+{sticker_instruction}
 风格参考：
 - 节奏自然：A连发2-3条 → B回1-2条 → A再发
 - 语气口语化，像朋友闲聊
