@@ -703,7 +703,7 @@ class SadStoryPlugin(Star):
                     chat_provider_id=provider_id,
                     prompt=prompt,
                 ),
-                timeout=120.0
+                timeout=180.0
             )
             raw = llm_resp.completion_text.strip()
             raw = re.sub(r'\[[\d]{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\].*', '', raw)
@@ -1361,7 +1361,7 @@ class SadStoryPlugin(Star):
                 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
             llm_resp = await asyncio.wait_for(
                 self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt),
-                timeout=120.0
+                timeout=180.0
             )
             raw = llm_resp.completion_text.strip()
             # 提取 JSON
@@ -1433,7 +1433,7 @@ class SadStoryPlugin(Star):
                 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
             llm_resp = await asyncio.wait_for(
                 self.context.llm_generate(chat_provider_id=provider_id, prompt=gen_prompt),
-                timeout=120.0
+                timeout=180.0
             )
             raw = llm_resp.completion_text.strip()
             start = raw.find("{")

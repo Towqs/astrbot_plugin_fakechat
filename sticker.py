@@ -88,19 +88,13 @@ class StickerManager:
         if not stickers:
             return ""
         
-        sticker_list = []
-        for name, desc in stickers.items():
-            sticker_list.append(f"  - [{name}]：{desc}")
+        sticker_names = list(stickers.keys())[:10]
+        sticker_list = ", ".join(sticker_names)
         
         return f"""
-可用贴纸（在消息中插入 <sticker name="贴纸名"/>）：
-{chr(10).join(sticker_list)}
-
-贴纸使用规则：
-1. 只有在情绪强烈时才使用贴纸，不要每条消息都用
-2. 使用频率控制在 {self.frequency}% 以内
-3. 选择与当前情绪/场景匹配的贴纸
-4. 贴纸放在消息末尾，例如："卧槽太离谱了 <sticker name="angry"/>"
+可用贴纸：{sticker_list} 等
+使用方式：在消息末尾插入 <sticker name="贴纸名"/>
+注意：仅在情绪强烈时使用，频率控制在 {self.frequency}% 以内
 """
 
     def update_config(self, enabled: bool = False, frequency: int = 10):
