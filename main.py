@@ -821,7 +821,7 @@ class SadStoryPlugin(Star):
         segments = []
         pattern = r'\[表情[:：]([^\]]+)\]'
         sticker_pattern = r'<sticker\s+name="([^"]+)".*?/>'
-        combined_pattern = f'({pattern.pattern}|{sticker_pattern})'
+        combined_pattern = f'({pattern}|{sticker_pattern})'
         
         last_end = 0
         for match in re.finditer(combined_pattern, content, re.DOTALL):
