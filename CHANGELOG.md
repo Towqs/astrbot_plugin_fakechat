@@ -7,6 +7,7 @@
 - Prompt 模板支持 {sticker_instruction} 变量
 - 修复：双主角模式 Prompt 缺少 sticker_instruction 变量
 - 修复：嵌套聊天生成（nest.py）未支持贴纸功能
+- 修复：贴纸标签 <sticker> 未被解析为图片（需在消息构建时解析）
 
 ## v0.9.4
 - 代码规范化优化：
