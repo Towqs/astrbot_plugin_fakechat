@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.9.5
+- 新增贴纸功能集成：支持 meme_manager_lite 插件的贴纸
+- 新增配置项：启用贴纸功能、贴纸使用频率
+- 贴纸管理模块独立到 sticker.py，便于维护
+- Prompt 模板支持 {sticker_instruction} 变量
+
 ## v0.9.4
 - 代码规范化优化：
   - 添加 terminate() 方法，插件卸载时正确关闭数据库连接

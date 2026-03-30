@@ -46,6 +46,19 @@
     "hint": "开启后消息中会穿插QQ自带表情（流泪、大哭、叹气等），让聊天更真实。",
     "default": true
   },
+  "use_meme_sticker": {
+    "description": "启用贴纸功能",
+    "type": "bool",
+    "hint": "开启后消息中会穿插 meme_manager_lite 插件的贴纸。需要先安装该插件。",
+    "default": false
+  },
+  "meme_sticker_frequency": {
+    "description": "贴纸使用频率",
+    "type": "int",
+    "hint": "贴纸在消息中的使用频率百分比（0-100），数值越大使用越多。",
+    "slider": { "min": 0, "max": 100, "step": 5 },
+    "default": 10
+  },
   "use_casual_style": {
     "description": "默认使用口语化风格",
     "type": "bool",
