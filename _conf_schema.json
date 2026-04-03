@@ -190,5 +190,17 @@
     "hint": "每个嵌套转发里最多几条消息。",
     "slider": { "min": 2, "max": 20, "step": 1 },
     "default": 8
+  },
+  "remove_ending_punctuation": {
+    "description": "去除句末标点",
+    "type": "bool",
+    "hint": "开启后，会自动去掉大模型生成语段的结尾特定标点符号（如最后面的句号等），极大增加野生网感，而且不影响中途标点。",
+    "default": true
+  },
+  "punctuations_to_remove": {
+    "description": "要去除的标点符号",
+    "type": "string",
+    "hint": "填入需要被自动过滤的句末标点符号，默认推荐：。，；~！",
+    "default": "。，；;~"
   }
 }
