@@ -26,14 +26,20 @@ class StickerManager:
                 "default", 
                 "memes"
             )
+            # 优先尝试从 AstrBot 运行数据目录获取图片
+            try:
+                data_dir = StarTools.get_data_dir("astrbot_plugin_meme_manager_lite")
+                run_memes_dir = os.path.join(data_dir, "memes")
+                if os.path.exists(run_memes_dir):
+                    self._stickers_dir = run_memes_dir
+                    return self._stickers_dir
+            except Exception:
+                pass
+
             if os.path.exists(default_memes_dir):
                 self._stickers_dir = default_memes_dir
             else:
-                try:
-                    data_dir = StarTools.get_data_dir("astrbot_plugin_meme_manager_lite")
-                    self._stickers_dir = os.path.join(data_dir, "memes")
-                except Exception:
-                    self._stickers_dir = default_memes_dir
+                self._stickers_dir = default_memes_dir
         return self._stickers_dir
 
     def _get_sticker_image_path(self, sticker_name: str) -> str:
@@ -58,6 +64,18 @@ class StickerManager:
             return self._stickers_cache
         
         try:
+            # 优先从实际的数据运行目录加载配置
+            try:
+                data_dir = StarTools.get_data_dir("astrbot_plugin_meme_manager_lite")
+                run_data_file = os.path.join(data_dir, "memes_data.json")
+                if os.path.exists(run_data_file):
+                    with open(run_data_file, "r", encoding="utf-8") as f:
+                        self._stickers_cache = json.load(f)
+                    logger.info(f"[SadStory] 从数据目录加载了 {len(self._stickers_cache)} 个贴纸")
+                    return self._stickers_cache
+            except Exception:
+                pass
+
             if os.path.exists(MEME_STICKERS_FILE):
                 with open(MEME_STICKERS_FILE, "r", encoding="utf-8") as f:
                     self._stickers_cache = json.load(f)
@@ -88,13 +106,16 @@ class StickerManager:
         if not stickers:
             return ""
         
-        sticker_names = list(stickers.keys())[:10]
-        sticker_list = ", ".join(sticker_names)
+        # 将更多贴纸放入 prompt 并给予更加规范的要求
+        sticker_names = list(stickers.keys())[:30]
+        sticker_list = "、".join(sticker_names)
         
         return f"""
-可用贴纸：{sticker_list} 等
-使用方式：在消息末尾插入 <sticker name="贴纸名"/>
-注意：仅在情绪强烈时使用，频率控制在 {self.frequency}% 以内
+【贴纸表情包支持】
+当前对话可插入自定义贴纸（千万不可捏造列表外的不存在贴纸）。
+✅ 可用贴纸名：{sticker_list}
+使用格式：在对话中合适位置插入 <sticker name="贴纸名"/>。此标签可以直接作为独立的一条消息，也可附在句末。
+注意：仅在情感较强烈时偶尔使用，避免过度依赖，插入贴纸的概率请控制在 {self.frequency}% 左右。
 """
 
     def update_config(self, enabled: bool = False, frequency: int = 10):
