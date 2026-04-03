@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import random
@@ -814,9 +815,13 @@ class SadStoryPlugin(Star):
                     sticker_name = name_match.group(1)
                     image_path = self.sticker_manager._get_sticker_image_path(sticker_name)
                     if image_path:
-                        # 兼容跨平台路径，使用 pathlib 生成标准 file URI
-                        uri = Path(image_path).absolute().as_uri()
-                        segments.append({"type": "image", "data": {"file": uri}})
+                        # 兼容 Docker / 容器分离架构，直接转换为 base64 发送
+                        try:
+                            with open(image_path, "rb") as f:
+                                b64_data = base64.b64encode(f.read()).decode()
+                            segments.append({"type": "image", "data": {"file": f"base64://{b64_data}"}})
+                        except Exception as e:
+                            logger.error(f"[SadStory] 无法读取贴纸图片 {image_path}: {e}")
                     else:
                         logger.warning(f"[SadStory] 贴纸图片不存在: {sticker_name}")
             
