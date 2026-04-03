@@ -772,6 +772,25 @@ class SadStoryPlugin(Star):
                 if not user_info:
                     user_info = fallback_user
                 
+                # ==== 提取并剥离“假引用”构建真实嵌套引用节点 ====
+                quote_data = None
+                quote_pattern = r'^[「\[]回复\s*([^：:\]」]+)[：:](.*?)[」\]]\s*'
+                quote_match = re.search(quote_pattern, content)
+                if quote_match:
+                    ref_name = quote_match.group(1).strip()
+                    ref_content = quote_match.group(2).strip()
+                    ref_uin = "10000"
+                    for nick, info in nickname_candidates:
+                        if (isinstance(ref_name, str) and isinstance(nick, str)) and (ref_name in nick or nick in ref_name):
+                            ref_uin = info["user_id"]
+                            break
+                    quote_data = {
+                        "name": ref_name,
+                        "uin": ref_uin,
+                        "content": ref_content
+                    }
+                    content = content[quote_match.end():]
+
                 # ==== 新特性：智能剥离句末标点 ====
                 if getattr(self, "remove_ending_punctuation", True):
                     puncs = getattr(self, "punctuations_to_remove", "。，；;~")
@@ -782,11 +801,15 @@ class SadStoryPlugin(Star):
 
                 if "<sticker" in content:
                     logger.info(f"[SadStory] 检测到贴纸标签: {content}")
-                messages.append({
+                
+                msg_dict = {
                     "nickname": user_info["nickname"],
                     "user_id": user_info["user_id"],
                     "content": content,
-                })
+                }
+                if quote_data:
+                    msg_dict["quote"] = quote_data
+                messages.append(msg_dict)
             return messages
 
         except json.JSONDecodeError as e:
@@ -852,10 +875,24 @@ class SadStoryPlugin(Star):
     def _build_forward_nodes(self, messages: list) -> list:
         nodes = []
         for msg in messages:
+            content_segments = []
+            
+            # --- 构建引用嵌套节点 ---
+            if "quote" in msg:
+                content_segments.append({
+                    "type": "node",
+                    "data": {
+                        "nickname": msg["quote"]["name"],
+                        "user_id": str(msg["quote"]["uin"]),
+                        "content": [{"type": "text", "data": {"text": msg["quote"]["content"]}}]
+                    }
+                })
+
             if self.use_face_emoji or self.sticker_manager.enabled:
-                content_segments = self._parse_content_segments(msg["content"])
+                content_segments.extend(self._parse_content_segments(msg["content"]))
             else:
-                content_segments = [{"type": "text", "data": {"text": msg["content"]}}]
+                content_segments.append({"type": "text", "data": {"text": msg["content"]}})
+                
             nodes.append({
                 "type": "node",
                 "data": {
