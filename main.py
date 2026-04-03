@@ -200,7 +200,7 @@ STORY_PROMPT_DUAL_LITERARY = """你是一个伪装聊天创作者。请模拟在
 """
 
 
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.9.6")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.9.7")
 class SadStoryPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
