@@ -814,7 +814,9 @@ class SadStoryPlugin(Star):
                     sticker_name = name_match.group(1)
                     image_path = self.sticker_manager._get_sticker_image_path(sticker_name)
                     if image_path:
-                        segments.append({"type": "image", "data": {"file": f"file:///{image_path}"}})
+                        # 兼容 Windows 系统的反斜杠导致 NAPCAT URI 解析失败的问题 
+                        normalized_path = image_path.replace("\\", "/")
+                        segments.append({"type": "image", "data": {"file": f"file:///{normalized_path}"}})
                     else:
                         logger.warning(f"[SadStory] 贴纸图片不存在: {sticker_name}")
             
