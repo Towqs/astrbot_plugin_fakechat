@@ -877,17 +877,12 @@ class SadStoryPlugin(Star):
         for msg in messages:
             content_segments = []
             
-            # --- 构建引用嵌套节点 ---
+            # --- 优雅降级：纯文本排版来模拟引用框 ---
             if "quote" in msg:
+                quote_text = f"『引用 @{msg['quote']['name']}：{msg['quote']['content']}』\n"
                 content_segments.append({
-                    "type": "reply",
-                    "data": {
-                        "id": "1",
-                        "text": msg["quote"]["content"],
-                        "qq": str(msg["quote"]["uin"]),
-                        "time": str(int(time.time())),
-                        "seq": "1"
-                    }
+                    "type": "text", 
+                    "data": {"text": quote_text}
                 })
 
             if self.use_face_emoji or self.sticker_manager.enabled:
