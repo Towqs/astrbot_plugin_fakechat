@@ -880,11 +880,13 @@ class SadStoryPlugin(Star):
             # --- 构建引用嵌套节点 ---
             if "quote" in msg:
                 content_segments.append({
-                    "type": "node",
+                    "type": "reply",
                     "data": {
-                        "nickname": msg["quote"]["name"],
-                        "user_id": str(msg["quote"]["uin"]),
-                        "content": [{"type": "text", "data": {"text": msg["quote"]["content"]}}]
+                        "id": "1",
+                        "text": msg["quote"]["content"],
+                        "qq": str(msg["quote"]["uin"]),
+                        "time": str(int(time.time())),
+                        "seq": "1"
                     }
                 })
 
