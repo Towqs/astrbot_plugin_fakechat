@@ -912,9 +912,7 @@ class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateComm
                 round_messages = result.get("messages", [])
                 if not round_messages:
                     break
-                message_seq = round_messages[0].get("message_id", 0) - 1
-                if message_seq < 0:
-                    message_seq = 0
+                message_seq = round_messages[0].get("message_id", 0)
                 for msg in reversed(round_messages):
                     sender_id = str(msg.get("sender", {}).get("user_id", ""))
                     if sender_id == str(target_id):
