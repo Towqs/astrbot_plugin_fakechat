@@ -30,10 +30,12 @@ class StyleCommandsMixin:
         except Exception as e:
             logger.error(f"[SadStory] show_styles 执行异常: {e}")
             yield event.plain_result(f"获取风格列表失败: {e}")
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addstyle")
     async def add_style(self, event: AiocqhttpMessageEvent):
         """添加写作风格（管理员专用）。用法：/sadstory_addstyle 风格名（换行后跟内容）"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可添加风格")
+            return
         try:
             raw = event.message_str
             after_cmd = raw.partition(" ")[2]
@@ -92,10 +94,12 @@ class StyleCommandsMixin:
         except Exception as e:
             logger.error(f"[SadStory] toggle_style 执行异常: {e}")
             yield event.plain_result(f"操作失败: {e}")
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_delstyle")
     async def delete_style(self, event: AiocqhttpMessageEvent):
         """删除写作风格（管理员专用）。用法：/sadstory_delstyle ID"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可删除风格")
+            return
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
             yield event.plain_result("用法：/sadstory_delstyle ID\n（ID 可通过 /sadstory_style 查看）")

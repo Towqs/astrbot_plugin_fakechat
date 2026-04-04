@@ -210,14 +210,7 @@
 - JSON 提取改为渐进式解析，替代贪婪正则
 - 角色模糊匹配改为最长匹配优先，避免短昵称误命中
 - 主题 @ 去除改用精确字符串处理，替代脆弱正则
-- 移除from .commands.cmd_style import StyleCommandsMixin
-from .commands.cmd_template import TemplateCommandsMixin
-from .commands.cmd_persona import PersonaCommandsMixin
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.9.2")_generate_story 内重复 import re
-- _clear_cooldown 改为异步加锁，与 _check_and_set_cooldown 保持一致
-- 模板内容上限 10000 字，风格内容上限 5000 字
-- 数据库 name 字段添加 UNIQUE 约束，防止重复命名
-- 添加/风格命令重复名称时返回友好提示
+- 移除 list_templates/add_template 命令中的冗余 _reload_config 调用
 
 ## v0.4.2
 - StarTools 导入路径改为 astrbot.api.star，符合框架规范

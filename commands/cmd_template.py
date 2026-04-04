@@ -8,10 +8,12 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import Aioc
 from ..configs.constants import TEMPLATES_DIR
 
 class TemplateCommandsMixin:
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_addtpl")
     async def add_template(self, event: AiocqhttpMessageEvent):
         """添加故事模板（管理员专用）。用法：/sadstory_addtpl 模板名（换行后跟模板内容）"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可添加模板")
+            return
         try:
             raw = event.message_str
             after_cmd = raw.partition(" ")[2]
@@ -88,10 +90,12 @@ class TemplateCommandsMixin:
         except Exception as e:
             logger.error(f"[SadStory] use_template 执行异常: {e}")
             yield event.plain_result(f"操作失败: {e}")
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_deltpl")
     async def delete_template(self, event: AiocqhttpMessageEvent):
         """删除故事模板（管理员专用）。用法：/sadstory_deltpl ID"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可删除模板")
+            return
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
             yield event.plain_result("用法：/sadstory_deltpl ID\n（ID 可通过 /sadstory_listtpl 查看方括号内的数字）")
