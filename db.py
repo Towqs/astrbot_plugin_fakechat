@@ -48,6 +48,14 @@ class SadStoryDB:
                         PRIMARY KEY (user_id, usage_date)
                     )
                 """)
+                await self._conn.execute("""
+                    CREATE TABLE IF NOT EXISTS user_personas (
+                        user_id TEXT PRIMARY KEY,
+                        nickname TEXT NOT NULL,
+                        persona_card TEXT NOT NULL,
+                        update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
                 await self._conn.commit()
                 logger.info("[SadStory] 数据库初始化完成")
             except Exception as e:
@@ -240,4 +248,58 @@ class SadStoryDB:
             except Exception as e:
                 await self._safe_rollback()
                 logger.error(f"[SadStory] increment_user_daily_usage 失败: {e}")
+                raise
+
+    # ==================== 永久人设库接口 ====================
+
+    async def get_persona(self, user_id: str) -> str | None:
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            async with self._conn.execute(
+                "SELECT persona_card FROM user_personas WHERE user_id=?", 
+                (user_id,)
+            ) as cur:
+                row = await cur.fetchone()
+                return row["persona_card"] if row else None
+
+    async def get_all_personas(self) -> list[tuple[str, str, str]]:
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            async with self._conn.execute(
+                "SELECT user_id, nickname, persona_card FROM user_personas ORDER BY update_time DESC"
+            ) as cur:
+                return [(r["user_id"], r["nickname"], r["persona_card"]) async for r in cur]
+
+    async def save_persona(self, user_id: str, nickname: str, persona_card: str):
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            try:
+                await self._conn.execute("""
+                    INSERT INTO user_personas (user_id, nickname, persona_card, update_time) 
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id) DO UPDATE SET 
+                        nickname=excluded.nickname, 
+                        persona_card=excluded.persona_card,
+                        update_time=CURRENT_TIMESTAMP
+                """, (user_id, nickname, persona_card))
+                await self._conn.commit()
+            except Exception as e:
+                await self._safe_rollback()
+                logger.error(f"[SadStory] save_persona 失败: {e}")
+                raise
+
+    async def delete_persona(self, user_id: str) -> bool:
+        async with self._tx_lock:
+            if self._conn is None:
+                raise RuntimeError("[SadStory] 数据库未初始化")
+            try:
+                cur = await self._conn.execute("DELETE FROM user_personas WHERE user_id=?", (user_id,))
+                await self._conn.commit()
+                return cur.rowcount > 0
+            except Exception as e:
+                await self._safe_rollback()
+                logger.error(f"[SadStory] delete_persona 失败: {e}")
                 raise

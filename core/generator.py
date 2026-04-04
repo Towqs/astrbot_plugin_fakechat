@@ -74,6 +74,21 @@ class StoryGeneratorMixin:
 
         sticker_instruction = self.sticker_manager.generate_instruction()
 
+        # 解析专属人设
+        persona_lines = []
+        if dual_mode:
+            p_a = await self.db.get_persona(str(protagonist_a["user_id"]))
+            p_b = await self.db.get_persona(str(protagonist_b["user_id"]))
+            if p_a: persona_lines.append(f"【{protagonist_a['nickname']}】的人设档案：{p_a}")
+            if p_b: persona_lines.append(f"【{protagonist_b['nickname']}】的人设档案：{p_b}")
+        else:
+            p = await self.db.get_persona(str(protagonist["user_id"]))
+            if p: persona_lines.append(f"【{protagonist['nickname']}】的人设档案：{p}")
+            
+        persona_section = ""
+        if persona_lines:
+            persona_section = "!!! 最高优先级：侦测到主角的灵魂档案库注入，剧本内容必须严格贯彻以下性格特征 !!!\\n" + "\\n".join(persona_lines)
+
         # 构建格式化变量
         if dual_mode:
             format_vars = {
@@ -84,6 +99,7 @@ class StoryGeneratorMixin:
                 "max_msg": self.story_max_messages,
                 "theme_line": theme_line,
                 "reference_section": reference_section,
+                "persona_section": persona_section,
                 "emoji_instruction": EMOJI_INSTRUCTION if self.use_face_emoji else "",
                 "sticker_instruction": sticker_instruction,
             }
@@ -95,6 +111,7 @@ class StoryGeneratorMixin:
                 "max_msg": self.story_max_messages,
                 "theme_line": theme_line,
                 "reference_section": reference_section,
+                "persona_section": persona_section,
                 "emoji_instruction": EMOJI_INSTRUCTION if self.use_face_emoji else "",
                 "sticker_instruction": sticker_instruction,
             }
