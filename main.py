@@ -26,7 +26,7 @@ from .configs.constants import *
 from .core.generator import StoryGeneratorMixin
 from .commands.cmd_style import StyleCommandsMixin
 from .commands.cmd_template import TemplateCommandsMixin
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.9.8")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.8.5")
 class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateCommandsMixin):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
