@@ -10,6 +10,7 @@ class StyleCommandsMixin:
     async def show_styles(self, event: AiocqhttpMessageEvent):
         """查看写作风格列表。用法：/sadstory_style"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         try:
             styles = await self.db.get_styles()
@@ -68,6 +69,7 @@ class StyleCommandsMixin:
     async def toggle_style(self, event: AiocqhttpMessageEvent):
         """启用/禁用写作风格。用法：/sadstory_usestyle ID"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         logger.debug(f"[SadStory] sadstory_usestyle message_str={event.message_str!r}")
         arg = event.message_str.partition(" ")[2].strip()
@@ -122,6 +124,7 @@ class StyleCommandsMixin:
     async def ai_add_style(self, event: AiocqhttpMessageEvent):
         """让 AI 生成并写入写作风格。用法：/sadstory_aistyle 风格描述"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         desc = event.message_str.partition(" ")[2].strip()
         if not desc:

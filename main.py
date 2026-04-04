@@ -766,6 +766,23 @@ class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateComm
             "sadstory_reload": """【/sadstory_reload】重新加载素材群用户
 用法：/sadstory_reload
 说明：从配置的素材群重新获取用户列表""",
+
+            "sadstory_capture": """【/sadstory_capture】抓取用户人设 🔒管理员
+用法：/sadstory_capture @目标 [条数]
+示例：
+  /sadstory_capture @小明
+  /sadstory_capture @小明 30
+  /sadstory_capture 123456789 50
+说明：抓取目标用户的群聊历史发言，由 AI 生成人物画像并永久存入数据库。
+条数范围 10-100，默认 50""",
+
+            "sadstory_listp": """【/sadstory_listp】查看人设档案 🔒管理员
+用法：/sadstory_listp
+说明：列出数据库中所有已捕获的人物画像""",
+
+            "sadstory_delp": """【/sadstory_delp】删除人设档案 🔒管理员
+用法：/sadstory_delp @目标 或 /sadstory_delp QQ号
+说明：删除某人的人设记录，该用户将恢复默认生成""",
         }
         
         help_content = {**user_help, **admin_help} if is_admin else user_help
@@ -800,6 +817,11 @@ class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateComm
 ⚙️ 其他
   /sadstory_config - 查看配置
   /sadstory_reload - 重载用户列表
+
+🧠 人设系统
+  /sadstory_capture - 抓取用户人设 🔒
+  /sadstory_listp - 查看人设档案 🔒
+  /sadstory_delp - 删除人设档案 🔒
 
 💡 输入 /sadstory_help [指令名] 查看详细用法
    示例：/sadstory_help sadstory_nest"""

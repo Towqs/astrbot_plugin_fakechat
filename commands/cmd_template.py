@@ -45,6 +45,7 @@ class TemplateCommandsMixin:
     async def list_templates(self, event: AiocqhttpMessageEvent):
         """查看所有故事模板。用法：/sadstory_listtpl"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         try:
             db_tpls = await self.db.get_templates()
@@ -69,6 +70,7 @@ class TemplateCommandsMixin:
     async def use_template(self, event: AiocqhttpMessageEvent):
         """启用/禁用指定模板。用法：/sadstory_usetpl ID"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         arg = event.message_str.partition(" ")[2].strip()
         if not arg:
@@ -118,6 +120,7 @@ class TemplateCommandsMixin:
     async def ai_add_template(self, event: AiocqhttpMessageEvent):
         """让 AI 生成并写入故事模板。用法：/sadstory_aitpl 故事描述"""
         if not self._check_permission(event):
+            yield event.plain_result("🔒 你没有权限使用此指令")
             return
         desc = event.message_str.partition(" ")[2].strip()
         if not desc:
