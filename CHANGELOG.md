@@ -1,5 +1,13 @@
 # 更新日志
 
+## v0.9.2
+- **再战拦截神之锅**：经测试确认原生 `PermissionType.ADMIN` 会漏放给大模型。重新在模块底层手动下发 `_is_admin` 权限盾。
+- **兼容艾特截断**：新增对 `[At:]` 解析器的支持。
+- **数据库级灵魂容器（永久人设 RAG 机制）**：重磅功能上线！引入了真正的底层记忆体系。
+  - 新增 `/sadstory_capture @张三 [条数]` 指令。系统会在后台疯狂分页追溯最近的群历史消息，精准过滤出只属于该人的数十条发言，交给大模型提纯出一份“灵魂侧写卡”，并**永久固化进 SQLite 数据库**的 `user_personas` 表中。
+  - 从此以后，只要此人被设定为小剧场的主角，大模型都会在底层深处强行加载并附体他的专属人设卡。无需每次生成再重新抓取聊天记录，同时消灭了无尽的延迟打底与 Token 开销噩梦！
+  - 新增附带指令：`/sadstory_listp` 查看被关在小黑屋的灵魂图鉴；`/sadstory_delp` 将某个灵魂放归自由。
+
 ## v0.9.0
 - **数据库级灵魂容器（永久人设 RAG 机制）**：重磅功能上线！引入了真正的底层记忆体系。
   - 新增 `/sadstory_capture @张三 [条数]` 指令。系统会在后台疯狂分页追溯最近的群历史消息，精准过滤出只属于该人的数十条发言，交给大模型提纯出一份“灵魂侧写卡”，并**永久固化进 SQLite 数据库**的 `user_personas` 表中。
@@ -202,7 +210,14 @@
 - JSON 提取改为渐进式解析，替代贪婪正则
 - 角色模糊匹配改为最长匹配优先，避免短昵称误命中
 - 主题 @ 去除改用精确字符串处理，替代脆弱正则
-- 移除 list_templates/add_template 命令中的冗余 _reload_config 调用
+- 移除from .commands.cmd_style import StyleCommandsMixin
+from .commands.cmd_template import TemplateCommandsMixin
+from .commands.cmd_persona import PersonaCommandsMixin
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.9.2")_generate_story 内重复 import re
+- _clear_cooldown 改为异步加锁，与 _check_and_set_cooldown 保持一致
+- 模板内容上限 10000 字，风格内容上限 5000 字
+- 数据库 name 字段添加 UNIQUE 约束，防止重复命名
+- 添加/风格命令重复名称时返回友好提示
 
 ## v0.4.2
 - StarTools 导入路径改为 astrbot.api.star，符合框架规范

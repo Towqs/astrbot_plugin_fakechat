@@ -15,10 +15,13 @@ class PersonaCommandsMixin:
                 text += seg.get("data", {}).get("text", "")
         return text.strip()
 
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_capture")
     async def capture_persona(self, event: AiocqhttpMessageEvent):
         """抓取并总结用户人设。用法：/sadstory_capture @目标 或 /sadstory_capture QQ号 [最大抓取条数,默认50]"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 你没有权限使用这件可怕的法器（仅限系统管理员）")
+            return
+            
         raw_msg = event.message_str.partition(" ")[2].strip()
         if not raw_msg:
             yield event.plain_result("用法：/sadstory_capture @目标 或 /sadstory_capture QQ号 [提取句数(默认50)]")
@@ -30,6 +33,7 @@ class PersonaCommandsMixin:
         if at_ids:
             target_id = at_ids[0]
             raw_msg = re.sub(r'\[CQ:at,qq=\d+\]', '', raw_msg).strip()
+            raw_msg = re.sub(r'\[At:\d+\]', '', raw_msg).strip()
             raw_msg = re.sub(r'@\S+', '', raw_msg).strip()
         else:
             parts = raw_msg.split()
@@ -136,10 +140,13 @@ class PersonaCommandsMixin:
             logger.error(f"[SadStory] 人设总结失败: {e}")
             yield event.plain_result(f"人格测写失败: 大模型抽风了或超时 ({e})")
             
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_listp")
     async def list_personas(self, event: AiocqhttpMessageEvent):
         """列出所有保存在数据库中的灵魂人设"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可查看人设档案。")
+            return
+            
         try:
             personas = await self.db.get_all_personas()
             if not personas:
@@ -156,10 +163,13 @@ class PersonaCommandsMixin:
             logger.error(f"[SadStory] 获取人设列表失败: {e}")
             yield event.plain_result(f"查询失败: {e}")
 
-    @filter.permission_type(PermissionType.ADMIN)
     @filter.command("sadstory_delp")
     async def delete_persona(self, event: AiocqhttpMessageEvent):
         """删除某个被困在数据库里的人设。用法：/sadstory_delp QQ号 或 @某人"""
+        if not await getattr(self, "_is_admin", lambda e: False)(event):
+            yield event.plain_result("🔒 仅管理员可释放人设档案。")
+            return
+            
         raw = event.message_str.partition(" ")[2].strip()
         at_ids = self._get_at_user_ids(event)
         target_id = at_ids[0] if at_ids else raw.split()[0] if raw else ""
