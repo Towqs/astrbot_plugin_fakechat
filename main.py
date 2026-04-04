@@ -26,7 +26,7 @@ from .configs.constants import *
 from .core.generator import StoryGeneratorMixin
 from .commands.cmd_style import StyleCommandsMixin
 from .commands.cmd_template import TemplateCommandsMixin
-@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.8.5")
+@register("astrbot_plugin_sadstory", "Towqs", "伪装聊天插件 - 以合并转发形式在群聊中展示伪装聊天", "0.8.6")
 class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateCommandsMixin):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -378,20 +378,36 @@ class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateComm
 
 
     async def _resolve_user_info(self, bot, group_id: int, user_id: str) -> dict:
+        nickname = ""
         try:
             info = await asyncio.wait_for(
                 bot.get_group_member_info(group_id=group_id, user_id=int(user_id)),
                 timeout=10.0
             )
             if info:
-                nickname = info.get("card", "") or info.get("nickname", "") or f"用户{user_id[-4:]}"
-                return {"nickname": nickname, "user_id": user_id}
+                nickname = info.get("card", "") or info.get("nickname", "")
         except asyncio.TimeoutError:
             logger.warning(f"[SadStory] get_group_member_info 超时: user_id={user_id}")
         except Exception as e:
-            logger.warning(f"[SadStory] get_group_member_info 失败: {e}")
-        return {"nickname": f"用户{user_id[-4:]}", "user_id": user_id}
+            logger.debug(f"[SadStory] get_group_member_info 失败 (非群员或无效): {e}")
 
+        if not nickname:
+            try:
+                info = await asyncio.wait_for(
+                    bot.get_stranger_info(user_id=int(user_id)),
+                    timeout=10.0
+                )
+                if info:
+                    nickname = info.get("nickname", "")
+            except asyncio.TimeoutError:
+                logger.debug(f"[SadStory] get_stranger_info 超时: user_id={user_id}")
+            except Exception as e:
+                logger.debug(f"[SadStory] get_stranger_info 失败: {e}")
+
+        if not nickname:
+            nickname = f"用户{str(user_id)[-4:]}"
+
+        return {"nickname": nickname, "user_id": str(user_id)}
 
 
     # ==================== 合并转发构建 ====================
@@ -425,16 +441,39 @@ class SadStoryPlugin(Star, StoryGeneratorMixin, StyleCommandsMixin, TemplateComm
         success = False
         try:
             theme = event.message_str.partition(" ")[2].strip()
+
+            forced_protagonists = []
+            group_id = int(group_id_str)
+
+            # 纯数字 QQ 提取 (仅限管理员)
+            if await self._is_admin(event):
+                parts = theme.split()
+                leading_qqs = []
+                for p in parts:
+                    if p.isdigit() and 5 <= len(p) <= 11:
+                        leading_qqs.append(p)
+                        if len(leading_qqs) >= 2:
+                            break
+                    else:
+                        break
+                if leading_qqs:
+                    for str_qq in leading_qqs:
+                        info = await self._resolve_user_info(event.bot, group_id, str_qq)
+                        forced_protagonists.append(info)
+                    theme = " ".join(parts[len(leading_qqs):]).strip()
+
             if len(theme) > 100:
                 theme = theme[:100]
 
-            forced_protagonists = []
             at_ids = self._get_at_user_ids(event)
-            group_id = int(group_id_str)
             if at_ids:
                 for uid in at_ids:
-                    info = await self._resolve_user_info(event.bot, group_id, uid)
-                    forced_protagonists.append(info)
+                    # 去重，防止之前提取 QQ 时已经添加过
+                    if not any(p['user_id'] == str(uid) for p in forced_protagonists):
+                        info = await self._resolve_user_info(event.bot, group_id, uid)
+                        forced_protagonists.append(info)
+                        if len(forced_protagonists) >= 2:
+                            break
                 logger.info(f"[SadStory] @获取到的主角: {[(p['nickname'], p['user_id']) for p in forced_protagonists]}")
                 theme = re.sub(r'@\S+', '', theme).strip()
                 if len(forced_protagonists) == 1:
