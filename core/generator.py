@@ -2,8 +2,15 @@ import json
 import re
 import asyncio
 import base64
+import random
 from astrbot.api import logger
-from configs.constants import FACE_MAP
+from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+
+from ..configs.constants import (
+    FACE_MAP, EMOJI_INSTRUCTION, 
+    STORY_PROMPT_DUAL_CASUAL, STORY_PROMPT_DUAL_LITERARY,
+    STORY_PROMPT_CASUAL, STORY_PROMPT_LITERARY
+)
 
 class StoryGeneratorMixin:
     async def _generate_story(self, event: AiocqhttpMessageEvent, theme: str = "", forced_protagonists: list[dict] | None = None, user_pool: list | None = None) -> list:

@@ -1,8 +1,11 @@
 import os
+import json
+import asyncio
+from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.event.filter import PermissionType
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
-from configs.constants import TEMPLATES_DIR
+from ..configs.constants import TEMPLATES_DIR
 
 class TemplateCommandsMixin:
     @filter.permission_type(PermissionType.ADMIN)
